@@ -25,15 +25,21 @@ def run():
 
     # Load initial state from query or use defaults
     region_input = params.get("region_input", "3.3 Gb")
-    coverage_mode = st.segmented_control(
-        "Coverage Mode", ["Genome-wide", "Targeted Panel"],
-        help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
-        default=params["coverage_mode"])
+    num_amplicons = params.get("num_amplicons", 0)
+    amplicon_size = params.get("amplicon_size", 0)
 
-    variable = st.segmented_control(
-        "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
-        help="Pick which variable you'd like to solve for, given your other inputs.",
-        default=params["variable"])
+    col_cov, col_var = st.columns(2)
+    with col_cov:
+        coverage_mode = st.radio(
+            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+            index=["Genome-wide", "Targeted Panel"].index(params["coverage_mode"]))
+
+    with col_var:
+        variable = st.radio(
+            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+            help="Pick which variable you'd like to solve for, given your other inputs.",
+            index=["Samples per flow cell", "Depth", "Genome size"].index(params["variable"]))
 
     col_preset, col_settings = st.columns(2)
     with col_preset: 
@@ -87,12 +93,17 @@ def run():
         with st.container(border=True):
             samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
 
+    platform_values = [p.value for p in Platform]
+    default_platform_value = params["platform"]
+    if default_platform_value not in platform_values:
+        default_platform_value = "MiSeq v3 (2x300)"
+
     platform = st.selectbox(
-            "Sequencing Platform",
-            options=list(Platform),
-            format_func=lambda p: p.value,
-            index=[p.value for p in Platform].index(params["platform"])
-        )
+        "Sequencing Platform",
+        options=list(Platform),
+        format_func=lambda p: p.value,
+        index=platform_values.index(default_platform_value)
+    )
     output_bp = PLATFORM_OUTPUT[platform]
 
     if platform == Platform.MINION:
@@ -147,13 +158,13 @@ def run():
         result = calc.calc_samples_per_flow_cell()
         label = "Samples per Flow Cell"
         value = f"{result:.1f}"
-        delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons)" if coverage_mode == "Targeted Panel" else f"at {depth:.1f}X genome-wide"
+        delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons) using {platform.value}." if coverage_mode == "Targeted Panel" else f"at {depth:.1f}X genome-wide"
 
     elif variable == "Depth":
         result = calc.calc_depth()
         label = "Estimated Depth"
         value = f"{result:.1f}X"
-        delta = f"Per amplicon across {samples} samples" if coverage_mode == "Targeted Panel" else f"Genome-wide across {samples} samples"
+        delta = f"Per amplicon across {samples} samples" if coverage_mode == "Targeted Panel" else f"Genome-wide across {samples} samples using {platform}"
 
     elif variable == "Genome size":
         result = calc.calc_genome_size()
@@ -168,8 +179,6 @@ def run():
 
     if variable == "Samples per flow cell" and result < 1:
         warning_placeholder.warning("Sequencing output is too low for even one sample.")
-    if variable == "Depth" and result > 1000:
-        warning_placeholder.warning("Depth exceeds 1000X.")
     if total_bp < 1_000_000:
         warning_placeholder.error("Effective sequencing output is extremely low.")
 
