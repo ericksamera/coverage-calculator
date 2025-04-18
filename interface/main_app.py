@@ -1,3 +1,5 @@
+# interface/main_app.py
+
 import streamlit as st
 import json
 
@@ -18,23 +20,7 @@ def run():
     params = load_query_params()
     st.title("Sequencing Coverage Calculator")
 
-    # -- Paste Config Modal
-    @st.dialog("Paste Configuration Code")
-    def paste_config_dialog():
-        config_input = st.text_area("Paste configuration string here (base64-encoded):", height=150)
-        if st.button("Apply Configuration"):
-            config = decode_config(config_input.strip())
-            if config:
-                for k, v in config.items():
-                    st.session_state[k] = v
-                st.success("✅ Configuration applied. Reloading...")
-                st.rerun()
-
-    if st.button("🧩 Paste Configuration Code"):
-        paste_config_dialog()
-
     result_placeholder = st.empty()
-    result_dl_placeholder = st.empty()
     warning_placeholder = st.empty()
 
     # Load initial state from query or use defaults
