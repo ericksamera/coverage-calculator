@@ -41,7 +41,7 @@ def load_query_params():
         "variable": params.get("variable", "Samples per flow cell"),
         "preset": params.get("preset", "Custom"),
         "region_input": params.get("region_input", "3.3 Gb"),
-        "depth": safe_cast(params.get("depth"), float, 30),
+        "depth": safe_cast(params.get("depth"), int, 30),
         "samples": safe_cast(params.get("samples"), int, 1),
         "duplication": safe_cast(params.get("duplication"), float, 2.5),
         "on_target": safe_cast(params.get("on_target"), int, 85),
