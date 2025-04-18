@@ -1,1487 +1,1870 @@
 # 🧾 Git Diff Summary (vs HEAD)
 
 ```diff
-diff --git a/git_diff_summary.md b/git_diff_summary.md
-index b063903..e038701 100644
---- a/git_diff_summary.md
-+++ b/git_diff_summary.md
-@@ -1,1178 +1,270 @@
- # 🧾 Git Diff Summary (vs HEAD)
+diff --git a/codebase.py.txt b/codebase.py.txt
+index 255ba05..18df859 100644
+--- a/codebase.py.txt
++++ b/codebase.py.txt
+@@ -1,8 +1,51 @@
++import subprocess
++import os
++
++def get_diff_vs_head():
++    """Returns full diff against HEAD (staged + unstaged)."""
++    return subprocess.check_output(["git", "diff", "HEAD"]).decode("utf-8")
++
++def get_untracked_files():
++    """Returns a list of untracked (new) files."""
++    files = subprocess.check_output(
++        ["git", "ls-files", "--others", "--exclude-standard"]
++    ).decode("utf-8").splitlines()
++    return [f for f in files if os.path.isfile(f)]
++
++def render_untracked_as_diff(files):
++    """Generates diff-style output for untracked files."""
++    result = []
++    for filepath in files:
++        result.append(f"diff --git a/{filepath} b/{filepath}")
++        result.append(f"new file mode 100644")
++        result.append(f"--- /dev/null")
++        result.append(f"+++ b/{filepath}")
++        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
++            for line in f:
++                result.append(f"+{line.rstrip()}")
++        result.append("")  # newline between files
++    return "\n".join(result)
++
++def write_diff_to_markdown(diff_output, output_path="git_diff_summary.md"):
++    with open(output_path, "w") as f:
++        f.write("# 🧾 Git Diff Summary (vs HEAD)\n\n")
++        f.write("```diff\n")
++        f.write(diff_output.strip())
++        f.write("\n```\n")
++    print(f"✅ Diff written to: {output_path}")
++
++if __name__ == "__main__":
++    diff = get_diff_vs_head()
++    untracked = get_untracked_files()
++    diff += "\n" + render_untracked_as_diff(untracked)
++    write_diff_to_markdown(diff)
+ import streamlit as st
+ import json
  
- ```diff
--diff --git a/README.md b/README.md
--index 0ecf3c9..89eca66 100644
----- a/README.md
--+++ b/README.md
--@@ -1 +1,27 @@
---# coverage-calculator
--\ No newline at end of file
--+# Sequencing Coverage Calculator
--+
--+A Streamlit-based app to estimate sequencing coverage metrics such as:
--+
--+- Samples per flow cell  
--+- Depth per sample  
--+- Supported region size  
--+
--+Supports both **genome-wide** and **targeted panel** sequencing.
--+
--+## Features
--+
--+- Platform presets for MiSeq, MinION, NovaSeq, etc.
--+- Protocol presets (e.g. AmpliSeq-style panels)
--+- Modeling options:  
--+  - Lander-Waterman library complexity  
--+  - GC bias  
--+  - Fragment/read overlap
--+- Base64-encoded config sharing (via URL or paste)
--+- Live warnings and result formatting
--+- Exportable config string for reproducibility
--+
--+
--+## Example Use Cases
--+- AmpliSeq panel planning
--+- WGS depth estimation
--+- Flow cell sample budgeting
--\ No newline at end of file
+ from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
+-from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
++from coverage_calculator.utils.query_state import (
++    load_query_params, update_query_params, encode_config, decode_config
++)
+ from coverage_calculator.calculator.coverage_model import CoverageCalculator
+ from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
+ from coverage_calculator.config.presets import PRESETS
+@@ -13,47 +56,39 @@ from coverage_calculator.calculator.modeling import (
+ )
+ 
+ def run():
 -
--diff --git a/codebase.py.txt b/codebase.py.txt
--new file mode 100644
----- /dev/null
--+++ b/codebase.py.txt
--+import streamlit as st
--+import json
--+
--+from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
--+from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
--+from coverage_calculator.calculator.coverage_model import CoverageCalculator
--+from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
--+from coverage_calculator.config.presets import PRESETS
--+from coverage_calculator.calculator.modeling import (
--+    lander_waterman_effective_coverage,
--+    adjust_for_gc_bias,
--+    adjust_for_fragment_overlap,
--+)
--+
--+def run():
--+
--+    params = load_query_params()
--+    coverage_mode = params["coverage_mode"]
--+    variable = params["variable"]
--+    preset = params["preset"]
--+    region_input = params["region_input"]
--+    depth = params["depth"]
--+    samples = params["samples"]
--+    duplication = params["duplication"]
--+    on_target = params["on_target"]
--+    platform_value = params["platform"]
--+    runtime_hr = params["runtime_hr"]
--+    apply_complexity = params["apply_complexity"]
--+    apply_gc_bias = params["apply_gc_bias"]
--+    gc_bias_percent = params["gc_bias_percent"]
--+    apply_fragment_model = params["apply_fragment_model"]
--+    fragment_size = params["fragment_size"]
--+    read_length = params["read_length"]
--+    num_amplicons = params["num_amplicons"]
--+    amplicon_size = params["amplicon_size"]
--+
--+
--+    st.title("Sequencing Coverage Calculator")
--+
--+    result_placeholder = st.empty()
--+    result_dl_placeholder = st.empty()
--+    warning_placeholder = st.empty()
--+
--+    output_text = None
--+
--+    col_cov, col_var = st.columns(2)
--+    with col_cov:
--+        coverage_mode = st.segmented_control(
--+            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
--+            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
--+            default="Targeted Panel")
--+    with col_var:
--+        variable = st.segmented_control(
--+            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
--+            help="Pick which variable you'd like to solve for, given your other inputs.",
--+            default="Samples per flow cell")
--+
--+    col_preset, col_settings = st.columns(2)
--+    with col_preset:
--+        preset = st.selectbox(
--+            "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
--+            help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
--+
--+
--+    with col_settings:
--+        if preset != "Custom":
--+            preset_values = PRESETS[preset]
--+            duplication = preset_values.duplication_pct
--+            on_target = preset_values.on_target_pct
--+            if coverage_mode == "Genome-wide":
--+                region_input = format_region_size(preset_values.region_bp)
--+            else:
--+                num_amplicons = preset_values.amplicon_count or 1380
--+                amplicon_size = round(preset_values.region_bp / num_amplicons)
--+        else:
--+            col_dup, col_target = st.columns(2)
--+            with col_dup: duplication = st.number_input(
--+                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
--+                help="Fraction of reads that are duplicates (e.g., from PCR).")
--+            with col_target: on_target = st.number_input(
--+                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
--+                help="Proportion of reads that align to your region of interest.")
--+
--+    col_size, col_depth, col_samples = st.columns(3)
--+
--+    with col_size:
--+        with st.container(border=True):
--+            if coverage_mode == "Targeted Panel":
--+                col_n_amp, col_amp_size = st.columns(2)
--+                with col_n_amp: num_amplicons = st.number_input(
--+                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
--+                    help="Total number of amplicons designed in the panel.")
--+                with col_amp_size: amplicon_size = st.number_input(
--+                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
--+                    help="Average base pair length of individual amplicons.")
--+                region_size = num_amplicons * amplicon_size
--+                st.caption(f"Total region size: {format_region_size(region_size)}")
--+            else:
--+                region_input = st.text_input(
--+                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
--+                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
--+                region_size = parse_region_size(region_input) if region_input else 1
--+
--+    with col_depth:
--+        with st.container(border=True):
--+            depth = st.number_input(
--+                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
--+                help="Desired average sequencing depth per base.")
--+            if coverage_mode == "Targeted Panel" and depth < 100:
--+                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
--+            if coverage_mode == "Genome-wide" and depth < 20:
--+                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
--+    with col_samples:
--+        with st.container(border=True): samples = st.number_input(
--+            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
--+            help="Number of samples to be run on a single flow cell.")
--+
--+    platform = st.selectbox(
--+        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
--+        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
--+    output_bp = PLATFORM_OUTPUT[platform]
--+
--+    if platform == Platform.MINION:
--+        runtime_hr = st.slider(
--+            "MinION Runtime (hrs)", 0, 72, 48,
--+            help="Run duration in hours. Affects total base output for MinION flow cells.")
--+        output_bp = 3_472_222 * runtime_hr * 60
--+        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
--+
--+    with st.expander("Advanced Modeling Options", expanded=False):
--+        if coverage_mode == "Genome-wide":
--+            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
--+        else:
--+            apply_complexity = False
--+
--+        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
--+        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
--+
--+        if apply_fragment_model:
--+            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
--+            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
--+        else:
--+            fragment_size = None
--+            read_length = None
--+
--+        if apply_gc_bias:
--+            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
--+        else:
--+            gc_bias_percent = 0.0
--+
--+    usable_fraction = (1 - duplication / 100) * (on_target / 100)
--+    total_bp = output_bp
--+
--+    if apply_fragment_model:
--+        total_bp = adjust_for_fragment_overlap(total_bp, read_length, fragment_size)
--+    if apply_complexity:
--+        total_bp = lander_waterman_effective_coverage(region_size, total_bp)
--+    if apply_gc_bias:
--+        total_bp = adjust_for_gc_bias(total_bp, gc_bias_percent / 100)
--+
--+    calc = CoverageCalculator(
--+        region_size_bp=region_size,
--+        depth=depth,
--+        samples=samples,
--+        output_bp=total_bp,
--+        duplication_pct=0,
--+        on_target_pct=100,
--+    )
--+
--+    if variable == "Samples per flow cell":
--+        result = calc.calc_samples_per_flow_cell()
--+        label = "Samples per Flow Cell"
--+        value = f"{result:.1f}"
--+        if coverage_mode == "Targeted Panel":
--+            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
--+        else:
--+            delta = f"at {depth:.1f}X genome-wide"
--+
--+    elif variable == "Depth":
--+        result = calc.calc_depth()
--+        label = "Estimated Depth"
--+        value = f"{result:.1f}X"
--+        if coverage_mode == "Targeted Panel":
--+            delta = f"Per amplicon across {samples} samples"
--+        else:
--+            delta = f"Genome-wide across {samples} samples"
--+
--+    elif variable == "Genome size":
--+        result = calc.calc_genome_size()
--+        label = "Supported Region Size"
--+        value = format_region_size(int(result))
--+        delta = f"at {depth:.1f}X depth for {samples} samples"
--+
--+    with result_placeholder:
--+        st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
--+
--+    # --- Warnings ---
--+    if variable == "Samples per flow cell" and result < 1:
--+        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
--+
--+    if variable == "Depth" and result > 1000:
--+        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
--+
--+    if total_bp < 1_000_000:
--+        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
--+
--+    update_query_params({
--+        "coverage_mode": coverage_mode,
--+        "variable": variable,
--+        "preset": preset,
--+        "region_input": region_input,
--+        "depth": depth,
--+        "samples": samples,
--+        "duplication": duplication,
--+        "on_target": on_target,
--+        "platform": platform.value,
--+        "runtime_hr": runtime_hr,
--+        "apply_complexity": apply_complexity,
--+        "apply_gc_bias": apply_gc_bias,
--+        "gc_bias_percent": gc_bias_percent,
--+        "apply_fragment_model": apply_fragment_model,
--+        "fragment_size": fragment_size,
--+        "read_length": read_length,
--+        "num_amplicons": num_amplicons,
--+        "amplicon_size": amplicon_size,
--+    })# utils/unit_parser.py
--+
--+def parse_region_size(input_str: str) -> int:
--+    """
--+    Parse strings like '3.3Gb', '500 Kbp', '1.2M', '1000000' into integer bp.
--+    Returns size in base pairs (bp).
--+    """
--+    input_str = input_str.strip().replace(" ", "").lower()
--+
--+    suffix_map = {
--+        "g": 1_000_000_000,
--+        "gb": 1_000_000_000,
--+        "m": 1_000_000,
--+        "mb": 1_000_000,
--+        "k": 1_000,
--+        "kb": 1_000,
--+        "bp": 1,
--+        "b": 1
--+    }
--+
--+    for suffix, factor in suffix_map.items():
--+        if input_str.endswith(suffix):
--+            num_str = input_str[:-len(suffix)]
--+            break
--+    else:
--+        num_str = input_str
--+        factor = 1
--+
--+    try:
--+        value = float(num_str)
--+    except ValueError:
--+        raise ValueError(f"Could not parse region size from input: '{input_str}'")
--+
--+    return int(value * factor)
--+
--+def format_region_size(bp: int, precision: int = 2) -> str:
--+    """
--+    Convert an integer bp value into a human-readable string (e.g., 3.3 Gb).
--+    """
--+    thresholds = [
--+        (1_000_000_000, "Gb"),
--+        (1_000_000, "Mb"),
--+        (1_000, "Kb"),
--+    ]
--+
--+    for factor, label in thresholds:
--+        if bp >= factor:
--+            value = round(bp / factor, precision)
--+            return f"{value} {label}"
--+
--+    return f"{bp} bp"
--+import streamlit as st
--+import json
--+import base64
--+
--+def safe_cast(val, to_type, default):
--+    try:
--+        return to_type(val)
--+    except (ValueError, TypeError):
--+        return default
--+
--+def encode_config(params: dict) -> str:
--+    json_str = json.dumps(params)
--+    return base64.urlsafe_b64encode(json_str.encode()).decode()
--+
--+def decode_config(encoded: str) -> dict:
--+    try:
--+        if not encoded or encoded in ["null", "None"]:
--+            return {}
--+        # Fix padding if needed
--+        missing_padding = len(encoded) % 4
--+        if missing_padding:
--+            encoded += "=" * (4 - missing_padding)
--+        decoded = base64.urlsafe_b64decode(encoded.encode()).decode()
--+        return json.loads(decoded)
--+    except Exception as e:
--+        st.warning("⚠️ Could not parse the configuration string.")
--+        print(f"[decode_config error] {e}")
--+        return {}
--+
--+def load_query_params():
--+    q = st.query_params
--+    encoded_config = q.get("config")
--+
--+    if encoded_config:
--+        params = decode_config(encoded_config)
--+    else:
--+        params = {}
--+
--+    return {
--+        "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
--+        "variable": params.get("variable", "Samples per flow cell"),
--+        "preset": params.get("preset", "Custom"),
--+        "region_input": params.get("region_input", "3.3 Gb"),
--+        "depth": safe_cast(params.get("depth"), float, 30),
--+        "samples": safe_cast(params.get("samples"), int, 1),
--+        "duplication": safe_cast(params.get("duplication"), float, 2.5),
--+        "on_target": safe_cast(params.get("on_target"), int, 85),
--+        "platform": params.get("platform", "NovaSeq 6000"),
--+        "runtime_hr": safe_cast(params.get("runtime_hr"), int, 48),
--+        "apply_complexity": params.get("apply_complexity", False),
--+        "apply_gc_bias": params.get("apply_gc_bias", False),
--+        "gc_bias_percent": safe_cast(params.get("gc_bias_percent"), float, 5.0),
--+        "apply_fragment_model": params.get("apply_fragment_model", False),
--+        "fragment_size": safe_cast(params.get("fragment_size"), int, 300),
--+        "read_length": safe_cast(params.get("read_length"), int, 150),
--+        "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
--+        "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
--+    }
--+
--+def update_query_params(params: dict):
--+    encoded = encode_config(params)
--+    st.query_params["config"] = encoded
--+# coverage_calculator/calculator/modeling.py
--+
--+import math
--+
--+def lander_waterman_effective_coverage(genome_size_bp: int, total_bases: float) -> float:
--+    """
--+    Estimate the effective coverage using the Lander-Waterman model.
--+    Returns the number of unique bases expected to be covered.
--+    """
--+    if genome_size_bp <= 0:
--+        return 0
--+    return genome_size_bp * (1 - math.exp(-total_bases / genome_size_bp))
--+
--+
--+def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> float:
--+    """
--+    Reduce effective coverage by a factor to simulate GC/sequence bias.
--+    Example: 0.05 = 5% reduction in usable coverage.
--+    """
--+    return effective_bp * (1 - gc_dropout_factor)
--+
--+
--+def adjust_for_fragment_overlap(total_bases: float, read_length: int, fragment_size: int) -> float:
--+    """
--+    Estimate the true usable base pairs based on fragment overlap.
--+    If reads overlap heavily (PE reads longer than fragments), subtract redundancy.
--+    """
--+    if fragment_size <= 0 or read_length <= 0:
--+        return total_bases
--+
--+    # PE overlap estimation
--+    if 2 * read_length > fragment_size:
--+        redundancy_factor = (2 * read_length - fragment_size) / (2 * read_length)
--+        return total_bases * (1 - redundancy_factor)
--+    return total_bases
--+# coverage_calculator/calculator/coverage_model.py
--+
--+class CoverageCalculator:
--+    def __init__(self, *, region_size_bp: int, depth: float, samples: int,
--+                 output_bp: float, duplication_pct: float, on_target_pct: float):
--+        self.region_size_bp = region_size_bp
--+        self.depth = depth
--+        self.samples = samples
--+        self.output_bp = output_bp
--+        self.duplication_pct = duplication_pct
--+        self.on_target_pct = on_target_pct
--+
--+    def _effective_yield_fraction(self) -> float:
--+        """
--+        Returns the fraction of usable reads after duplication and on-target filtering.
--+        """
--+        return (1 - self.duplication_pct / 100.0) * (self.on_target_pct / 100.0)
--+
--+    def calc_samples_per_flow_cell(self) -> float:
--+        """
--+        Returns number of samples supported per flow cell.
--+        """
--+        total_required = self.region_size_bp * self.depth / self._effective_yield_fraction()
--+        return self.output_bp / total_required
--+
--+    def calc_depth(self) -> float:
--+        """
--+        Returns achievable depth for given number of samples.
--+        """
--+        per_sample_output = self.output_bp / self.samples
--+        return per_sample_output * self._effective_yield_fraction() / self.region_size_bp
--+
--+    def calc_genome_size(self) -> float:
--+        """
--+        Returns the maximum genome size (in bp) that can be covered at the specified depth.
--+        """
--+        usable_per_sample = (self.output_bp / self.samples) * self._effective_yield_fraction()
--+        return usable_per_sample / self.depth
--+# coverage_calculator/config/platforms.py
--+
--+from enum import Enum
--+
--+class Platform(str, Enum):
--+    MISEQ_V3 = "MiSeq v3 (2x300)"
--+    MISEQ_V2 = "MiSeq v2 (2x250)"
--+    MISEQ_NANO = "MiSeq v2 Nano (2x250)"
--+    MISEQ_MICRO = "MiSeq v2 Micro (2x150)"
--+    MINION = "MinION FLO-MIN114"
--+
--+# Static outputs (bp)
--+PLATFORM_OUTPUT = {
--+    Platform.MISEQ_V3: 15_000_000_000,
--+    Platform.MISEQ_V2: 7_500_000_000,
--+    Platform.MISEQ_NANO: 600_000_000,
--+    Platform.MISEQ_MICRO: 2_400_000_000,
--+    Platform.MINION: 15_000_000_000,  # Placeholder, overridden by runtime model
--+}
--+# coverage_calculator/config/presets.py
--+
--+from dataclasses import dataclass
--+
--+@dataclass
--+class ProtocolPreset:
--+    label: str
--+    region_bp: int
--+    duplication_pct: float
--+    on_target_pct: float
--+    amplicon_count: int = None
--+
--+PRESETS = {
--+    "WGS (Human)": ProtocolPreset("WGS (Human)", 3_300_000_000, 2.5, 100),
--+    "Exome (Human)": ProtocolPreset("Exome (Human)", 50_000_000, 15.0, 80),
--+    "Amplicon Panel": ProtocolPreset("Amplicon Panel", 400_000, 10.0, 90),
--+    "Bacterial WGS": ProtocolPreset("Bacterial WGS", 5_000_000, 2.0, 100),
--+}
--+# streamlit_app.py
--+
--+import streamlit as st
--+from interface.main_app import run as run_calculator_ui
--+
--+APP_NAME = "Coverage Calculator"
--+APP_VERSION = "0.1.0"
--+APP_AUTHOR = "Erick Samera"
--+APP_COMMENT = "Streamlined sequencing coverage calculator"
--+
--+# Define pages using st.Page
--+pages = [
--+    st.Page(run_calculator_ui, title="Calculator", icon="", default=True),
--+    # Add more pages here as needed
--+]
--+
--+# Set up navigation
--+selected_page = st.navigation(pages)
--+
--+# Optional: Set consistent page config across all pages
--+st.set_page_config(page_title=APP_NAME, page_icon="", layout="wide")
--+
--+# Sidebar branding
--+with st.sidebar:
--+    st.title(f"{APP_NAME}")
--+    st.caption(f"@{APP_AUTHOR} | v{APP_VERSION}")
--+    st.caption(APP_COMMENT)
--+    st.markdown("---")
--+
--+# Run the selected page
--+selected_page.run()
+     params = load_query_params()
+-    coverage_mode = params["coverage_mode"]
+-    variable = params["variable"]
+-    preset = params["preset"]
+-    region_input = params["region_input"]
+-    depth = params["depth"]
+-    samples = params["samples"]
+-    duplication = params["duplication"]
+-    on_target = params["on_target"]
+-    platform_value = params["platform"]
+-    runtime_hr = params["runtime_hr"]
+-    apply_complexity = params["apply_complexity"]
+-    apply_gc_bias = params["apply_gc_bias"]
+-    gc_bias_percent = params["gc_bias_percent"]
+-    apply_fragment_model = params["apply_fragment_model"]
+-    fragment_size = params["fragment_size"]
+-    read_length = params["read_length"]
+-    num_amplicons = params["num_amplicons"]
+-    amplicon_size = params["amplicon_size"]
 -
--diff --git a/coverage_calculator/__init__.py b/coverage_calculator/__init__.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/__init__.py
 -
--diff --git a/coverage_calculator/calculator/__init__.py b/coverage_calculator/calculator/__init__.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/calculator/__init__.py
--
--diff --git a/coverage_calculator/calculator/coverage_model.py b/coverage_calculator/calculator/coverage_model.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/calculator/coverage_model.py
--+# coverage_calculator/calculator/coverage_model.py
--+
--+class CoverageCalculator:
--+    def __init__(self, *, region_size_bp: int, depth: float, samples: int,
--+                 output_bp: float, duplication_pct: float, on_target_pct: float):
--+        self.region_size_bp = region_size_bp
--+        self.depth = depth
--+        self.samples = samples
--+        self.output_bp = output_bp
--+        self.duplication_pct = duplication_pct
--+        self.on_target_pct = on_target_pct
--+
--+    def _effective_yield_fraction(self) -> float:
--+        """
--+        Returns the fraction of usable reads after duplication and on-target filtering.
--+        """
--+        return (1 - self.duplication_pct / 100.0) * (self.on_target_pct / 100.0)
--+
--+    def calc_samples_per_flow_cell(self) -> float:
--+        """
--+        Returns number of samples supported per flow cell.
--+        """
--+        total_required = self.region_size_bp * self.depth / self._effective_yield_fraction()
--+        return self.output_bp / total_required
--+
--+    def calc_depth(self) -> float:
--+        """
--+        Returns achievable depth for given number of samples.
--+        """
--+        per_sample_output = self.output_bp / self.samples
--+        return per_sample_output * self._effective_yield_fraction() / self.region_size_bp
--+
--+    def calc_genome_size(self) -> float:
--+        """
--+        Returns the maximum genome size (in bp) that can be covered at the specified depth.
--+        """
--+        usable_per_sample = (self.output_bp / self.samples) * self._effective_yield_fraction()
--+        return usable_per_sample / self.depth
--
--diff --git a/coverage_calculator/calculator/modeling.py b/coverage_calculator/calculator/modeling.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/calculator/modeling.py
--+# coverage_calculator/calculator/modeling.py
--+
--+import math
--+
--+def lander_waterman_effective_coverage(genome_size_bp: int, total_bases: float) -> float:
--+    """
--+    Estimate the effective coverage using the Lander-Waterman model.
--+    Returns the number of unique bases expected to be covered.
--+    """
--+    if genome_size_bp <= 0:
--+        return 0
--+    return genome_size_bp * (1 - math.exp(-total_bases / genome_size_bp))
--+
--+
--+def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> float:
--+    """
--+    Reduce effective coverage by a factor to simulate GC/sequence bias.
--+    Example: 0.05 = 5% reduction in usable coverage.
--+    """
--+    return effective_bp * (1 - gc_dropout_factor)
--+
--+
--+def adjust_for_fragment_overlap(total_bases: float, read_length: int, fragment_size: int) -> float:
--+    """
--+    Estimate the true usable base pairs based on fragment overlap.
--+    If reads overlap heavily (PE reads longer than fragments), subtract redundancy.
--+    """
--+    if fragment_size <= 0 or read_length <= 0:
--+        return total_bases
--+
--+    # PE overlap estimation
--+    if 2 * read_length > fragment_size:
--+        redundancy_factor = (2 * read_length - fragment_size) / (2 * read_length)
--+        return total_bases * (1 - redundancy_factor)
--+    return total_bases
--
--diff --git a/coverage_calculator/config/__init__.py b/coverage_calculator/config/__init__.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/config/__init__.py
--
--diff --git a/coverage_calculator/config/platforms.py b/coverage_calculator/config/platforms.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/config/platforms.py
--+# coverage_calculator/config/platforms.py
--+
--+from enum import Enum
--+
--+class Platform(str, Enum):
--+    MISEQ_V3 = "MiSeq v3 (2x300)"
--+    MISEQ_V2 = "MiSeq v2 (2x250)"
--+    MISEQ_NANO = "MiSeq v2 Nano (2x250)"
--+    MISEQ_MICRO = "MiSeq v2 Micro (2x150)"
--+    MINION = "MinION FLO-MIN114"
--+
--+# Static outputs (bp)
--+PLATFORM_OUTPUT = {
--+    Platform.MISEQ_V3: 15_000_000_000,
--+    Platform.MISEQ_V2: 7_500_000_000,
--+    Platform.MISEQ_NANO: 600_000_000,
--+    Platform.MISEQ_MICRO: 2_400_000_000,
--+    Platform.MINION: 15_000_000_000,  # Placeholder, overridden by runtime model
--+}
--
--diff --git a/coverage_calculator/config/presets.py b/coverage_calculator/config/presets.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/config/presets.py
--+# coverage_calculator/config/presets.py
--+
--+from dataclasses import dataclass
--+
--+@dataclass
--+class ProtocolPreset:
--+    label: str
--+    region_bp: int
--+    duplication_pct: float
--+    on_target_pct: float
--+    amplicon_count: int = None
--+
--+PRESETS = {
--+    "WGS (Human)": ProtocolPreset("WGS (Human)", 3_300_000_000, 2.5, 100),
--+    "Exome (Human)": ProtocolPreset("Exome (Human)", 50_000_000, 15.0, 80),
--+    "Amplicon Panel": ProtocolPreset("Amplicon Panel", 400_000, 10.0, 90),
--+    "Bacterial WGS": ProtocolPreset("Bacterial WGS", 5_000_000, 2.0, 100),
--+}
--
--diff --git a/coverage_calculator/utils/__init__.py b/coverage_calculator/utils/__init__.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/utils/__init__.py
--
--diff --git a/coverage_calculator/utils/query_state.py b/coverage_calculator/utils/query_state.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/utils/query_state.py
--+import streamlit as st
--+import json
--+import base64
--+
--+def safe_cast(val, to_type, default):
--+    try:
--+        return to_type(val)
--+    except (ValueError, TypeError):
--+        return default
--+
--+def encode_config(params: dict) -> str:
--+    json_str = json.dumps(params)
--+    return base64.urlsafe_b64encode(json_str.encode()).decode()
--+
--+def decode_config(encoded: str) -> dict:
--+    try:
--+        if not encoded or encoded in ["null", "None"]:
--+            return {}
--+        # Fix padding if needed
--+        missing_padding = len(encoded) % 4
--+        if missing_padding:
--+            encoded += "=" * (4 - missing_padding)
--+        decoded = base64.urlsafe_b64decode(encoded.encode()).decode()
--+        return json.loads(decoded)
--+    except Exception as e:
--+        st.warning("⚠️ Could not parse the configuration string.")
--+        print(f"[decode_config error] {e}")
--+        return {}
--+
--+def load_query_params():
--+    q = st.query_params
--+    encoded_config = q.get("config")
--+
--+    if encoded_config:
--+        params = decode_config(encoded_config)
--+    else:
--+        params = {}
--+
--+    return {
--+        "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
--+        "variable": params.get("variable", "Samples per flow cell"),
--+        "preset": params.get("preset", "Custom"),
--+        "region_input": params.get("region_input", "3.3 Gb"),
--+        "depth": safe_cast(params.get("depth"), float, 30),
--+        "samples": safe_cast(params.get("samples"), int, 1),
--+        "duplication": safe_cast(params.get("duplication"), float, 2.5),
--+        "on_target": safe_cast(params.get("on_target"), int, 85),
--+        "platform": params.get("platform", "NovaSeq 6000"),
--+        "runtime_hr": safe_cast(params.get("runtime_hr"), int, 48),
--+        "apply_complexity": params.get("apply_complexity", False),
--+        "apply_gc_bias": params.get("apply_gc_bias", False),
--+        "gc_bias_percent": safe_cast(params.get("gc_bias_percent"), float, 5.0),
--+        "apply_fragment_model": params.get("apply_fragment_model", False),
--+        "fragment_size": safe_cast(params.get("fragment_size"), int, 300),
--+        "read_length": safe_cast(params.get("read_length"), int, 150),
--+        "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
--+        "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
--+    }
--+
--+def update_query_params(params: dict):
--+    encoded = encode_config(params)
--+    st.query_params["config"] = encoded
--
--diff --git a/coverage_calculator/utils/unit_parser.py b/coverage_calculator/utils/unit_parser.py
--new file mode 100644
----- /dev/null
--+++ b/coverage_calculator/utils/unit_parser.py
--+# utils/unit_parser.py
--+
--+def parse_region_size(input_str: str) -> int:
--+    """
--+    Parse strings like '3.3Gb', '500 Kbp', '1.2M', '1000000' into integer bp.
--+    Returns size in base pairs (bp).
--+    """
--+    input_str = input_str.strip().replace(" ", "").lower()
--+
--+    suffix_map = {
--+        "g": 1_000_000_000,
--+        "gb": 1_000_000_000,
--+        "m": 1_000_000,
--+        "mb": 1_000_000,
--+        "k": 1_000,
--+        "kb": 1_000,
--+        "bp": 1,
--+        "b": 1
--+    }
--+
--+    for suffix, factor in suffix_map.items():
--+        if input_str.endswith(suffix):
--+            num_str = input_str[:-len(suffix)]
--+            break
--+    else:
--+        num_str = input_str
--+        factor = 1
--+
--+    try:
--+        value = float(num_str)
--+    except ValueError:
--+        raise ValueError(f"Could not parse region size from input: '{input_str}'")
--+
--+    return int(value * factor)
--+
--+def format_region_size(bp: int, precision: int = 2) -> str:
--+    """
--+    Convert an integer bp value into a human-readable string (e.g., 3.3 Gb).
--+    """
--+    thresholds = [
--+        (1_000_000_000, "Gb"),
--+        (1_000_000, "Mb"),
--+        (1_000, "Kb"),
--+    ]
--+
--+    for factor, label in thresholds:
--+        if bp >= factor:
--+            value = round(bp / factor, precision)
--+            return f"{value} {label}"
--+
--+    return f"{bp} bp"
--
--diff --git a/generate_git_dif.py b/generate_git_dif.py
--new file mode 100644
----- /dev/null
--+++ b/generate_git_dif.py
--+import subprocess
--+import os
--+
--+def get_diff_vs_head():
--+    """Returns full diff against HEAD (staged + unstaged)."""
--+    return subprocess.check_output(["git", "diff", "HEAD"]).decode("utf-8")
--+
--+def get_untracked_files():
--+    """Returns a list of untracked (new) files."""
--+    files = subprocess.check_output(
--+        ["git", "ls-files", "--others", "--exclude-standard"]
--+    ).decode("utf-8").splitlines()
--+    return [f for f in files if os.path.isfile(f)]
--+
--+def render_untracked_as_diff(files):
--+    """Generates diff-style output for untracked files."""
--+    result = []
--+    for filepath in files:
--+        result.append(f"diff --git a/{filepath} b/{filepath}")
--+        result.append(f"new file mode 100644")
--+        result.append(f"--- /dev/null")
--+        result.append(f"+++ b/{filepath}")
--+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
--+            for line in f:
--+                result.append(f"+{line.rstrip()}")
--+        result.append("")  # newline between files
--+    return "\n".join(result)
--+
--+def write_diff_to_markdown(diff_output, output_path="git_diff_summary.md"):
--+    with open(output_path, "w") as f:
--+        f.write("# 🧾 Git Diff Summary (vs HEAD)\n\n")
--+        f.write("```diff\n")
--+        f.write(diff_output.strip())
--+        f.write("\n```\n")
--+    print(f"✅ Diff written to: {output_path}")
--+
--+if __name__ == "__main__":
--+    diff = get_diff_vs_head()
--+    untracked = get_untracked_files()
--+    diff += "\n" + render_untracked_as_diff(untracked)
--+    write_diff_to_markdown(diff)
--
--diff --git a/git_diff_summary.md b/git_diff_summary.md
--new file mode 100644
----- /dev/null
--+++ b/git_diff_summary.md
--+# 🧾 Git Diff Summary (vs HEAD)
--+
--+```diff
--+diff --git a/README.md b/README.md
--+index 0ecf3c9..89eca66 100644
--+--- a/README.md
--++++ b/README.md
--+@@ -1 +1,27 @@
--+-# coverage-calculator
--+\ No newline at end of file
--++# Sequencing Coverage Calculator
--++
--++A Streamlit-based app to estimate sequencing coverage metrics such as:
--++
--++- Samples per flow cell
--++- Depth per sample
--++- Supported region size
--++
--++Supports both **genome-wide** and **targeted panel** sequencing.
--++
--++## Features
--++
--++- Platform presets for MiSeq, MinION, NovaSeq, etc.
--++- Protocol presets (e.g. AmpliSeq-style panels)
--++- Modeling options:
--++  - Lander-Waterman library complexity
--++  - GC bias
--++  - Fragment/read overlap
--++- Base64-encoded config sharing (via URL or paste)
--++- Live warnings and result formatting
--++- Exportable config string for reproducibility
--++
--++
--++## Example Use Cases
--++- AmpliSeq panel planning
--++- WGS depth estimation
--++- Flow cell sample budgeting
--+\ No newline at end of file
--+```
--+
--+## 🆕 Untracked Files
--+
--+```text
--+?? codebase.py.txt
--+?? coverage_calculator/__init__.py
--+?? coverage_calculator/calculator/__init__.py
--+?? coverage_calculator/calculator/coverage_model.py
--+?? coverage_calculator/calculator/modeling.py
--+?? coverage_calculator/config/__init__.py
--+?? coverage_calculator/config/platforms.py
--+?? coverage_calculator/config/presets.py
--+?? coverage_calculator/utils/__init__.py
--+?? coverage_calculator/utils/query_state.py
--+?? coverage_calculator/utils/unit_parser.py
--+?? generate_git_dif.py
--+?? interface/__init__.py
--+?? interface/main_app.py
--+?? streamlit_app.py
--+```
--
--diff --git a/interface/__init__.py b/interface/__init__.py
--new file mode 100644
----- /dev/null
--+++ b/interface/__init__.py
--
- diff --git a/interface/main_app.py b/interface/main_app.py
--new file mode 100644
----- /dev/null
-+index 921f9fb..174db48 100644
-+--- a/interface/main_app.py
- +++ b/interface/main_app.py
--+import streamlit as st
--+import json
--+
--+from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
--+from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
--+from coverage_calculator.calculator.coverage_model import CoverageCalculator
--+from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
--+from coverage_calculator.config.presets import PRESETS
--+from coverage_calculator.calculator.modeling import (
--+    lander_waterman_effective_coverage,
--+    adjust_for_gc_bias,
--+    adjust_for_fragment_overlap,
-+@@ -2,7 +2,9 @@ import streamlit as st
-+ import json
-+ 
-+ from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
-+-from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
-++from coverage_calculator.utils.query_state import (
-++    load_query_params, update_query_params, encode_config, decode_config
- +)
--+
--+def run():
--+
--+    params = load_query_params()
--+    coverage_mode = params["coverage_mode"]
--+    variable = params["variable"]
--+    preset = params["preset"]
--+    region_input = params["region_input"]
--+    depth = params["depth"]
--+    samples = params["samples"]
--+    duplication = params["duplication"]
--+    on_target = params["on_target"]
--+    platform_value = params["platform"]
--+    runtime_hr = params["runtime_hr"]
--+    apply_complexity = params["apply_complexity"]
--+    apply_gc_bias = params["apply_gc_bias"]
--+    gc_bias_percent = params["gc_bias_percent"]
--+    apply_fragment_model = params["apply_fragment_model"]
--+    fragment_size = params["fragment_size"]
--+    read_length = params["read_length"]
--+    num_amplicons = params["num_amplicons"]
--+    amplicon_size = params["amplicon_size"]
--+
--+
--+    st.title("Sequencing Coverage Calculator")
--+
--+    result_placeholder = st.empty()
--+    result_dl_placeholder = st.empty()
--+    warning_placeholder = st.empty()
--+
--+    output_text = None
--+
--+    col_cov, col_var = st.columns(2)
--+    with col_cov:
--+        coverage_mode = st.segmented_control(
--+            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
--+            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
--+            default="Targeted Panel")
--+    with col_var:
--+        variable = st.segmented_control(
--+            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
--+            help="Pick which variable you'd like to solve for, given your other inputs.",
--+            default="Samples per flow cell")
--+
--+    col_preset, col_settings = st.columns(2)
--+    with col_preset:
--+        preset = st.selectbox(
--+            "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
--+            help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
--+
--+
--+    with col_settings:
--+        if preset != "Custom":
--+            preset_values = PRESETS[preset]
--+            duplication = preset_values.duplication_pct
--+            on_target = preset_values.on_target_pct
--+            if coverage_mode == "Genome-wide":
--+                region_input = format_region_size(preset_values.region_bp)
--+            else:
--+                num_amplicons = preset_values.amplicon_count or 1380
--+                amplicon_size = round(preset_values.region_bp / num_amplicons)
--+        else:
--+            col_dup, col_target = st.columns(2)
--+            with col_dup: duplication = st.number_input(
--+                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
--+                help="Fraction of reads that are duplicates (e.g., from PCR).")
--+            with col_target: on_target = st.number_input(
--+                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
--+                help="Proportion of reads that align to your region of interest.")
--+
--+    col_size, col_depth, col_samples = st.columns(3)
--+
--+    with col_size:
--+        with st.container(border=True):
--+            if coverage_mode == "Targeted Panel":
--+                col_n_amp, col_amp_size = st.columns(2)
--+                with col_n_amp: num_amplicons = st.number_input(
--+                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
--+                    help="Total number of amplicons designed in the panel.")
--+                with col_amp_size: amplicon_size = st.number_input(
--+                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
--+                    help="Average base pair length of individual amplicons.")
--+                region_size = num_amplicons * amplicon_size
--+                st.caption(f"Total region size: {format_region_size(region_size)}")
--+            else:
--+                region_input = st.text_input(
--+                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
--+                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
--+                region_size = parse_region_size(region_input) if region_input else 1
--+
--+    with col_depth:
--+        with st.container(border=True):
--+            depth = st.number_input(
--+                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
--+                help="Desired average sequencing depth per base.")
--+            if coverage_mode == "Targeted Panel" and depth < 100:
--+                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
--+            if coverage_mode == "Genome-wide" and depth < 20:
--+                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
--+    with col_samples:
--+        with st.container(border=True): samples = st.number_input(
--+            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
--+            help="Number of samples to be run on a single flow cell.")
--+
--+    platform = st.selectbox(
--+        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
--+        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
--+    output_bp = PLATFORM_OUTPUT[platform]
--+
--+    if platform == Platform.MINION:
--+        runtime_hr = st.slider(
--+            "MinION Runtime (hrs)", 0, 72, 48,
--+            help="Run duration in hours. Affects total base output for MinION flow cells.")
--+        output_bp = 3_472_222 * runtime_hr * 60
--+        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
--+
--+    with st.expander("Advanced Modeling Options", expanded=False):
-+ from coverage_calculator.calculator.coverage_model import CoverageCalculator
-+ from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
-+ from coverage_calculator.config.presets import PRESETS
-+@@ -13,47 +15,38 @@ from coverage_calculator.calculator.modeling import (
-+ )
-+ 
-+ def run():
-+-
-+     params = load_query_params()
-+-    coverage_mode = params["coverage_mode"]
-+-    variable = params["variable"]
-+-    preset = params["preset"]
-+-    region_input = params["region_input"]
-+-    depth = params["depth"]
-+-    samples = params["samples"]
-+-    duplication = params["duplication"]
-+-    on_target = params["on_target"]
-+-    platform_value = params["platform"]
-+-    runtime_hr = params["runtime_hr"]
-+-    apply_complexity = params["apply_complexity"]
-+-    apply_gc_bias = params["apply_gc_bias"]
-+-    gc_bias_percent = params["gc_bias_percent"]
-+-    apply_fragment_model = params["apply_fragment_model"]
-+-    fragment_size = params["fragment_size"]
-+-    read_length = params["read_length"]
-+-    num_amplicons = params["num_amplicons"]
-+-    amplicon_size = params["amplicon_size"]
-+-
-+-
-+     st.title("Sequencing Coverage Calculator")
-+ 
-++    # -- Paste Config Modal
-++    @st.dialog("Paste Configuration Code")
-++    def paste_config_dialog():
-++        config_input = st.text_area("Paste configuration string here (base64-encoded):", height=150)
-++        if st.button("Apply Configuration"):
-++            config = decode_config(config_input.strip())
-++            if config:
-++                for k, v in config.items():
-++                    st.session_state[k] = v
-++                st.success("✅ Configuration applied. Reloading...")
-++                st.rerun()
-++
-++    if st.button("🧩 Paste Configuration Code"):
-++        paste_config_dialog()
-++
-+     result_placeholder = st.empty()
-+     result_dl_placeholder = st.empty()
-+     warning_placeholder = st.empty()
-+ 
-+-    output_text = None
-++    # Load initial state from query or use defaults
-++    coverage_mode = st.segmented_control(
-++        "Coverage Mode", ["Genome-wide", "Targeted Panel"],
-++        help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
-++        default=params["coverage_mode"])
-+ 
-+-    col_cov, col_var = st.columns(2)
-+-    with col_cov:
-+-        coverage_mode = st.segmented_control(
-+-            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
-+-            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
-+-            default="Targeted Panel")
-+-    with col_var:
-+-        variable = st.segmented_control(
-+-            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
-+-            help="Pick which variable you'd like to solve for, given your other inputs.",
-+-            default="Samples per flow cell")
-++    variable = st.segmented_control(
-++        "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
-++        help="Pick which variable you'd like to solve for, given your other inputs.",
-++        default=params["variable"])
-+ 
-+     col_preset, col_settings = st.columns(2)
-+     with col_preset: 
-+@@ -61,25 +54,21 @@ def run():
-+             "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
-+             help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
-+ 
-+-
-+-    with col_settings:
-+-        if preset != "Custom":
-+-            preset_values = PRESETS[preset]
-+-            duplication = preset_values.duplication_pct
-+-            on_target = preset_values.on_target_pct
-+-            if coverage_mode == "Genome-wide":
-+-                region_input = format_region_size(preset_values.region_bp)
-+-            else:
-+-                num_amplicons = preset_values.amplicon_count or 1380
-+-                amplicon_size = round(preset_values.region_bp / num_amplicons)
-++    if preset != "Custom":
-++        preset_values = PRESETS[preset]
-++        duplication = preset_values.duplication_pct
-++        on_target = preset_values.on_target_pct
- +        if coverage_mode == "Genome-wide":
--+            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
--+        else:
--+            apply_complexity = False
--+
--+        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
--+        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
--+
--+        if apply_fragment_model:
--+            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
--+            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
--+        else:
--+            fragment_size = None
--+            read_length = None
--+
--+        if apply_gc_bias:
--+            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
--+        else:
--+            gc_bias_percent = 0.0
--+
--+    usable_fraction = (1 - duplication / 100) * (on_target / 100)
--+    total_bp = output_bp
--+
--+    if apply_fragment_model:
--+        total_bp = adjust_for_fragment_overlap(total_bp, read_length, fragment_size)
--+    if apply_complexity:
--+        total_bp = lander_waterman_effective_coverage(region_size, total_bp)
--+    if apply_gc_bias:
--+        total_bp = adjust_for_gc_bias(total_bp, gc_bias_percent / 100)
--+
--+    calc = CoverageCalculator(
--+        region_size_bp=region_size,
--+        depth=depth,
--+        samples=samples,
--+        output_bp=total_bp,
--+        duplication_pct=0,
--+        on_target_pct=100,
--+    )
--+
--+    if variable == "Samples per flow cell":
--+        result = calc.calc_samples_per_flow_cell()
--+        label = "Samples per Flow Cell"
--+        value = f"{result:.1f}"
--+        if coverage_mode == "Targeted Panel":
--+            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
--+        else:
--+            delta = f"at {depth:.1f}X genome-wide"
--+
--+    elif variable == "Depth":
--+        result = calc.calc_depth()
--+        label = "Estimated Depth"
--+        value = f"{result:.1f}X"
--+        if coverage_mode == "Targeted Panel":
--+            delta = f"Per amplicon across {samples} samples"
--+        else:
--+            delta = f"Genome-wide across {samples} samples"
--+
--+    elif variable == "Genome size":
--+        result = calc.calc_genome_size()
--+        label = "Supported Region Size"
--+        value = format_region_size(int(result))
--+        delta = f"at {depth:.1f}X depth for {samples} samples"
--+
--+    with result_placeholder:
--+        st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
--+
--+    # --- Warnings ---
--+    if variable == "Samples per flow cell" and result < 1:
--+        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
--+
--+    if variable == "Depth" and result > 1000:
--+        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
--+
--+    if total_bp < 1_000_000:
--+        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
--+
--+    update_query_params({
--+        "coverage_mode": coverage_mode,
--+        "variable": variable,
--+        "preset": preset,
--+        "region_input": region_input,
--+        "depth": depth,
--+        "samples": samples,
--+        "duplication": duplication,
--+        "on_target": on_target,
--+        "platform": platform.value,
--+        "runtime_hr": runtime_hr,
--+        "apply_complexity": apply_complexity,
--+        "apply_gc_bias": apply_gc_bias,
--+        "gc_bias_percent": gc_bias_percent,
--+        "apply_fragment_model": apply_fragment_model,
--+        "fragment_size": fragment_size,
--+        "read_length": read_length,
--+        "num_amplicons": num_amplicons,
--+        "amplicon_size": amplicon_size,
--+    })
--
--diff --git a/streamlit_app.py b/streamlit_app.py
--new file mode 100644
----- /dev/null
--+++ b/streamlit_app.py
--+# streamlit_app.py
--+
--+import streamlit as st
--+from interface.main_app import run as run_calculator_ui
--+
--+APP_NAME = "Coverage Calculator"
--+APP_VERSION = "0.1.0"
--+APP_AUTHOR = "Erick Samera"
--+APP_COMMENT = "Streamlined sequencing coverage calculator"
--+
--+# Define pages using st.Page
--+pages = [
--+    st.Page(run_calculator_ui, title="Calculator", icon="", default=True),
--+    # Add more pages here as needed
--+]
--+
--+# Set up navigation
--+selected_page = st.navigation(pages)
--+
--+# Optional: Set consistent page config across all pages
--+st.set_page_config(page_title=APP_NAME, page_icon="", layout="wide")
--+
--+# Sidebar branding
--+with st.sidebar:
--+    st.title(f"{APP_NAME}")
--+    st.caption(f"@{APP_AUTHOR} | v{APP_VERSION}")
--+    st.caption(APP_COMMENT)
--+    st.markdown("---")
-++            region_input = format_region_size(preset_values.region_bp)
-+         else:
-+-            col_dup, col_target = st.columns(2)
-+-            with col_dup: duplication = st.number_input(
-+-                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
-+-                help="Fraction of reads that are duplicates (e.g., from PCR).")
-+-            with col_target: on_target = st.number_input(
-+-                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
-+-                help="Proportion of reads that align to your region of interest.")
-++            num_amplicons = preset_values.amplicon_count or 1380
-++            amplicon_size = round(preset_values.region_bp / num_amplicons)
-++    else:
-++        col_dup, col_target = st.columns(2)
-++        with col_dup:
-++            duplication = st.number_input("Duplication (%)", min_value=0.0, max_value=50.0, value=params["duplication"], step=0.5)
-++        with col_target:
-++            on_target = st.number_input("On-target (%)", min_value=0, max_value=100, value=params["on_target"], step=1)
-+ 
-+     col_size, col_depth, col_samples = st.columns(3)
-+ 
-+@@ -87,67 +76,60 @@ def run():
-+         with st.container(border=True):
-+             if coverage_mode == "Targeted Panel":
-+                 col_n_amp, col_amp_size = st.columns(2)
-+-                with col_n_amp: num_amplicons = st.number_input(
-+-                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
-+-                    help="Total number of amplicons designed in the panel.")
-+-                with col_amp_size: amplicon_size = st.number_input(
-+-                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
-+-                    help="Average base pair length of individual amplicons.")
-++                with col_n_amp:
-++                    num_amplicons = st.number_input("Number of Amplicons", min_value=1, value=params["num_amplicons"], step=10)
-++                with col_amp_size:
-++                    amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
-+                 region_size = num_amplicons * amplicon_size
-+                 st.caption(f"Total region size: {format_region_size(region_size)}")
-+             else:
-+-                region_input = st.text_input(
-+-                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
-+-                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
-++                region_input = st.text_input("Genome/Region Size", value=params["region_input"], disabled=variable == "Genome size")
-+                 region_size = parse_region_size(region_input) if region_input else 1
-+ 
-+     with col_depth:
-+         with st.container(border=True): 
-+-            depth = st.number_input(
-+-                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
-+-                help="Desired average sequencing depth per base.")
-++            depth = st.number_input("Depth (X)", value=params["depth"], disabled=variable == "Depth", step=5)
-+             if coverage_mode == "Targeted Panel" and depth < 100:
-+-                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
-++                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.")
-+             if coverage_mode == "Genome-wide" and depth < 20:
-+-                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
-+-    with col_samples: 
-+-        with st.container(border=True): samples = st.number_input(
-+-            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
-+-            help="Number of samples to be run on a single flow cell.")
-+-
-+-    platform = st.selectbox(
-+-        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
-+-        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
-++                st.info("Whole genome sequencing usually aims for at least 20X.")
- +
--+# Run the selected page
--+selected_page.run()
-++    with col_samples:
-++        with st.container(border=True):
-++            samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
-++
-++    platform = st.selectbox("Sequencing Platform", options=list(Platform), format_func=lambda p: p.value, index=0)
-+     output_bp = PLATFORM_OUTPUT[platform]
-+ 
-+     if platform == Platform.MINION:
-+-        runtime_hr = st.slider(
-+-            "MinION Runtime (hrs)", 0, 72, 48,
-+-            help="Run duration in hours. Affects total base output for MinION flow cells.")
-++        runtime_hr = st.slider("MinION Runtime (hrs)", 0, 72, params["runtime_hr"])
-+         output_bp = 3_472_222 * runtime_hr * 60
-+-        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
-++        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime")
-++    else:
-++        runtime_hr = params["runtime_hr"]
-+ 
-+     with st.expander("Advanced Modeling Options", expanded=False):
-+         if coverage_mode == "Genome-wide":
-+-            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
-++            apply_complexity = st.checkbox("Model library complexity (Lander-Waterman)", value=params["apply_complexity"])
-+         else:
-+             apply_complexity = False
-+ 
-+-        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
-+-        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
-++        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=params["apply_gc_bias"])
-++        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=params["apply_fragment_model"])
-+ 
-+         if apply_fragment_model:
-+-            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
-+-            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
-++            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=params["fragment_size"])
-++            read_length = st.number_input("Read length (bp)", min_value=50, value=params["read_length"])
-+         else:
-+             fragment_size = None
-+             read_length = None
-+ 
-+         if apply_gc_bias:
-+-            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
-++            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, params["gc_bias_percent"])
-+         else:
-+             gc_bias_percent = 0.0
-+ 
-++    # --- Calculations ---
-+     usable_fraction = (1 - duplication / 100) * (on_target / 100)
-+     total_bp = output_bp
-+ 
-+@@ -171,19 +153,13 @@ def run():
-+         result = calc.calc_samples_per_flow_cell()
-+         label = "Samples per Flow Cell"
-+         value = f"{result:.1f}"
-+-        if coverage_mode == "Targeted Panel":
-+-            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
-+-        else:
-+-            delta = f"at {depth:.1f}X genome-wide"
-++        delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons)" if coverage_mode == "Targeted Panel" else f"at {depth:.1f}X genome-wide"
-+ 
-+     elif variable == "Depth":
-+         result = calc.calc_depth()
-+         label = "Estimated Depth"
-+         value = f"{result:.1f}X"
-+-        if coverage_mode == "Targeted Panel":
-+-            delta = f"Per amplicon across {samples} samples"
-+-        else:
-+-            delta = f"Genome-wide across {samples} samples"
-++        delta = f"Per amplicon across {samples} samples" if coverage_mode == "Targeted Panel" else f"Genome-wide across {samples} samples"
-+ 
-+     elif variable == "Genome size":
-+         result = calc.calc_genome_size()
-+@@ -191,18 +167,17 @@ def run():
-+         value = format_region_size(int(result))
-+         delta = f"at {depth:.1f}X depth for {samples} samples"
-+ 
-++    output_text = f"{label}: {value} ({delta})"
-++
-+     with result_placeholder:
-+         st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
-+ 
-+-    # --- Warnings ---
-+     if variable == "Samples per flow cell" and result < 1:
-+-        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
-+-
-++        warning_placeholder.warning("Sequencing output is too low for even one sample.")
-+     if variable == "Depth" and result > 1000:
-+-        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
-+-
-++        warning_placeholder.warning("Depth exceeds 1000X.")
-+     if total_bp < 1_000_000:
-+-        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
-++        warning_placeholder.error("Effective sequencing output is extremely low.")
-+ 
-+     update_query_params({
-+         "coverage_mode": coverage_mode,
- ```
-diff --git a/interface/main_app.py b/interface/main_app.py
-index 174db48..a67880f 100644
---- a/interface/main_app.py
-+++ b/interface/main_app.py
-@@ -38,6 +38,7 @@ def run():
+     st.title("Sequencing Coverage Calculator")
+ 
++    # -- Paste Config Modal
++    @st.dialog("Paste Configuration Code")
++    def paste_config_dialog():
++        config_input = st.text_area("Paste configuration string here (base64-encoded):", height=150)
++        if st.button("Apply Configuration"):
++            config = decode_config(config_input.strip())
++            if config:
++                for k, v in config.items():
++                    st.session_state[k] = v
++                st.success("✅ Configuration applied. Reloading...")
++                st.rerun()
++
++    if st.button("🧩 Paste Configuration Code"):
++        paste_config_dialog()
++
+     result_placeholder = st.empty()
+     result_dl_placeholder = st.empty()
      warning_placeholder = st.empty()
  
-     # Load initial state from query or use defaults
+-    output_text = None
++    # Load initial state from query or use defaults
 +    region_input = params.get("region_input", "3.3 Gb")
-     coverage_mode = st.segmented_control(
-         "Coverage Mode", ["Genome-wide", "Targeted Panel"],
-         help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
-@@ -63,6 +64,7 @@ def run():
++    coverage_mode = st.segmented_control(
++        "Coverage Mode", ["Genome-wide", "Targeted Panel"],
++        help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
++        default=params["coverage_mode"])
+ 
+-    col_cov, col_var = st.columns(2)
+-    with col_cov:
+-        coverage_mode = st.segmented_control(
+-            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+-            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+-            default="Targeted Panel")
+-    with col_var:
+-        variable = st.segmented_control(
+-            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+-            help="Pick which variable you'd like to solve for, given your other inputs.",
+-            default="Samples per flow cell")
++    variable = st.segmented_control(
++        "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
++        help="Pick which variable you'd like to solve for, given your other inputs.",
++        default=params["variable"])
+ 
+     col_preset, col_settings = st.columns(2)
+     with col_preset: 
+@@ -61,25 +96,22 @@ def run():
+             "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
+             help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
+ 
+-
+-    with col_settings:
+-        if preset != "Custom":
+-            preset_values = PRESETS[preset]
+-            duplication = preset_values.duplication_pct
+-            on_target = preset_values.on_target_pct
+-            if coverage_mode == "Genome-wide":
+-                region_input = format_region_size(preset_values.region_bp)
+-            else:
+-                num_amplicons = preset_values.amplicon_count or 1380
+-                amplicon_size = round(preset_values.region_bp / num_amplicons)
++    if preset != "Custom":
++        preset_values = PRESETS[preset]
++        duplication = preset_values.duplication_pct
++        on_target = preset_values.on_target_pct
++        if coverage_mode == "Genome-wide":
++            region_input = format_region_size(preset_values.region_bp)
          else:
-             num_amplicons = preset_values.amplicon_count or 1380
-             amplicon_size = round(preset_values.region_bp / num_amplicons)
+-            col_dup, col_target = st.columns(2)
+-            with col_dup: duplication = st.number_input(
+-                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
+-                help="Fraction of reads that are duplicates (e.g., from PCR).")
+-            with col_target: on_target = st.number_input(
+-                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
+-                help="Proportion of reads that align to your region of interest.")
++            num_amplicons = preset_values.amplicon_count or 1380
++            amplicon_size = round(preset_values.region_bp / num_amplicons)
 +            region_input = f"{num_amplicons * amplicon_size} bp"
-     else:
-         col_dup, col_target = st.columns(2)
-         with col_dup:
-@@ -81,9 +83,10 @@ def run():
-                 with col_amp_size:
-                     amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
++    else:
++        col_dup, col_target = st.columns(2)
++        with col_dup:
++            duplication = st.number_input("Duplication (%)", min_value=0.0, max_value=50.0, value=params["duplication"], step=0.5)
++        with col_target:
++            on_target = st.number_input("On-target (%)", min_value=0, max_value=100, value=params["on_target"], step=1)
+ 
+     col_size, col_depth, col_samples = st.columns(3)
+ 
+@@ -87,67 +119,66 @@ def run():
+         with st.container(border=True):
+             if coverage_mode == "Targeted Panel":
+                 col_n_amp, col_amp_size = st.columns(2)
+-                with col_n_amp: num_amplicons = st.number_input(
+-                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
+-                    help="Total number of amplicons designed in the panel.")
+-                with col_amp_size: amplicon_size = st.number_input(
+-                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
+-                    help="Average base pair length of individual amplicons.")
++                with col_n_amp:
++                    num_amplicons = st.number_input("Number of Amplicons", min_value=1, value=params["num_amplicons"], step=10)
++                with col_amp_size:
++                    amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
                  region_size = num_amplicons * amplicon_size
 +                region_input = f"{region_size} bp"
                  st.caption(f"Total region size: {format_region_size(region_size)}")
              else:
--                region_input = st.text_input("Genome/Region Size", value=params["region_input"], disabled=variable == "Genome size")
+-                region_input = st.text_input(
+-                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
+-                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
 +                region_input = st.text_input("Genome/Region Size", value=region_input, disabled=variable == "Genome size")
                  region_size = parse_region_size(region_input) if region_input else 1
  
      with col_depth:
-@@ -198,4 +201,4 @@ def run():
+         with st.container(border=True): 
+-            depth = st.number_input(
+-                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
+-                help="Desired average sequencing depth per base.")
++            depth = st.number_input("Depth (X)", value=params["depth"], disabled=variable == "Depth", step=5)
+             if coverage_mode == "Targeted Panel" and depth < 100:
+-                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
++                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.")
+             if coverage_mode == "Genome-wide" and depth < 20:
+-                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
+-    with col_samples: 
+-        with st.container(border=True): samples = st.number_input(
+-            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
+-            help="Number of samples to be run on a single flow cell.")
++                st.info("Whole genome sequencing usually aims for at least 20X.")
++
++    with col_samples:
++        with st.container(border=True):
++            samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
+ 
+     platform = st.selectbox(
+-        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
+-        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
++        "Sequencing Platform",
++        options=list(Platform),
++        format_func=lambda p: p.value,
++        index=[p.value for p in Platform].index(platform_value)
++    )
+     output_bp = PLATFORM_OUTPUT[platform]
+ 
+     if platform == Platform.MINION:
+-        runtime_hr = st.slider(
+-            "MinION Runtime (hrs)", 0, 72, 48,
+-            help="Run duration in hours. Affects total base output for MinION flow cells.")
++        runtime_hr = st.slider("MinION Runtime (hrs)", 0, 72, params["runtime_hr"])
+         output_bp = 3_472_222 * runtime_hr * 60
+-        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
++        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime")
++    else:
++        runtime_hr = params["runtime_hr"]
+ 
+     with st.expander("Advanced Modeling Options", expanded=False):
+         if coverage_mode == "Genome-wide":
+-            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
++            apply_complexity = st.checkbox("Model library complexity (Lander-Waterman)", value=params["apply_complexity"])
+         else:
+             apply_complexity = False
+ 
+-        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
+-        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
++        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=params["apply_gc_bias"])
++        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=params["apply_fragment_model"])
+ 
+         if apply_fragment_model:
+-            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
+-            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
++            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=params["fragment_size"])
++            read_length = st.number_input("Read length (bp)", min_value=50, value=params["read_length"])
+         else:
+             fragment_size = None
+             read_length = None
+ 
+         if apply_gc_bias:
+-            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
++            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, params["gc_bias_percent"])
+         else:
+             gc_bias_percent = 0.0
+ 
++    # --- Calculations ---
+     usable_fraction = (1 - duplication / 100) * (on_target / 100)
+     total_bp = output_bp
+ 
+@@ -171,19 +202,13 @@ def run():
+         result = calc.calc_samples_per_flow_cell()
+         label = "Samples per Flow Cell"
+         value = f"{result:.1f}"
+-        if coverage_mode == "Targeted Panel":
+-            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
+-        else:
+-            delta = f"at {depth:.1f}X genome-wide"
++        delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons)" if coverage_mode == "Targeted Panel" else f"at {depth:.1f}X genome-wide"
+ 
+     elif variable == "Depth":
+         result = calc.calc_depth()
+         label = "Estimated Depth"
+         value = f"{result:.1f}X"
+-        if coverage_mode == "Targeted Panel":
+-            delta = f"Per amplicon across {samples} samples"
+-        else:
+-            delta = f"Genome-wide across {samples} samples"
++        delta = f"Per amplicon across {samples} samples" if coverage_mode == "Targeted Panel" else f"Genome-wide across {samples} samples"
+ 
+     elif variable == "Genome size":
+         result = calc.calc_genome_size()
+@@ -191,18 +216,17 @@ def run():
+         value = format_region_size(int(result))
+         delta = f"at {depth:.1f}X depth for {samples} samples"
+ 
++    output_text = f"{label}: {value} ({delta})"
++
+     with result_placeholder:
+         st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
+ 
+-    # --- Warnings ---
+     if variable == "Samples per flow cell" and result < 1:
+-        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
+-
++        warning_placeholder.warning("Sequencing output is too low for even one sample.")
+     if variable == "Depth" and result > 1000:
+-        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
+-
++        warning_placeholder.warning("Depth exceeds 1000X.")
+     if total_bp < 1_000_000:
+-        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
++        warning_placeholder.error("Effective sequencing output is extremely low.")
+ 
+     update_query_params({
+         "coverage_mode": coverage_mode,
+@@ -223,7 +247,8 @@ def run():
          "read_length": read_length,
          "num_amplicons": num_amplicons,
          "amplicon_size": amplicon_size,
--    })
-\ No newline at end of file
+-    })# utils/unit_parser.py
 +    })
++# utils/unit_parser.py
+ 
+ def parse_region_size(input_str: str) -> int:
+     """
+@@ -317,7 +342,7 @@ def load_query_params():
+         "variable": params.get("variable", "Samples per flow cell"),
+         "preset": params.get("preset", "Custom"),
+         "region_input": params.get("region_input", "3.3 Gb"),
+-        "depth": safe_cast(params.get("depth"), float, 30),
++        "depth": safe_cast(params.get("depth"), int, 30),
+         "samples": safe_cast(params.get("samples"), int, 1),
+         "duplication": safe_cast(params.get("duplication"), float, 2.5),
+         "on_target": safe_cast(params.get("on_target"), int, 85),
+diff --git a/coverage_calculator/utils/query_state.py b/coverage_calculator/utils/query_state.py
+index 8c4df03..9f2e106 100644
+--- a/coverage_calculator/utils/query_state.py
++++ b/coverage_calculator/utils/query_state.py
+@@ -1,3 +1,5 @@
++# coverage_calculator/utils/query_state.py
++
+ import streamlit as st
+ import json
+ import base64
+diff --git a/git_diff_summary.md b/git_diff_summary.md
+index 3578b30..cb2fea4 100644
+--- a/git_diff_summary.md
++++ b/git_diff_summary.md
+@@ -1,1487 +1,17 @@
+ # 🧾 Git Diff Summary (vs HEAD)
+ 
+ ```diff
+-diff --git a/git_diff_summary.md b/git_diff_summary.md
+-index b063903..e038701 100644
+---- a/git_diff_summary.md
+-+++ b/git_diff_summary.md
+-@@ -1,1178 +1,270 @@
+- # 🧾 Git Diff Summary (vs HEAD)
+- 
+- ```diff
+--diff --git a/README.md b/README.md
+--index 0ecf3c9..89eca66 100644
+----- a/README.md
+--+++ b/README.md
+--@@ -1 +1,27 @@
+---# coverage-calculator
+--\ No newline at end of file
+--+# Sequencing Coverage Calculator
+--+
+--+A Streamlit-based app to estimate sequencing coverage metrics such as:
+--+
+--+- Samples per flow cell  
+--+- Depth per sample  
+--+- Supported region size  
+--+
+--+Supports both **genome-wide** and **targeted panel** sequencing.
+--+
+--+## Features
+--+
+--+- Platform presets for MiSeq, MinION, NovaSeq, etc.
+--+- Protocol presets (e.g. AmpliSeq-style panels)
+--+- Modeling options:  
+--+  - Lander-Waterman library complexity  
+--+  - GC bias  
+--+  - Fragment/read overlap
+--+- Base64-encoded config sharing (via URL or paste)
+--+- Live warnings and result formatting
+--+- Exportable config string for reproducibility
+--+
+--+
+--+## Example Use Cases
+--+- AmpliSeq panel planning
+--+- WGS depth estimation
+--+- Flow cell sample budgeting
+--\ No newline at end of file
+--
+--diff --git a/codebase.py.txt b/codebase.py.txt
+--new file mode 100644
+----- /dev/null
+--+++ b/codebase.py.txt
+--+import streamlit as st
+--+import json
+--+
+--+from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
+--+from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
+--+from coverage_calculator.calculator.coverage_model import CoverageCalculator
+--+from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
+--+from coverage_calculator.config.presets import PRESETS
+--+from coverage_calculator.calculator.modeling import (
+--+    lander_waterman_effective_coverage,
+--+    adjust_for_gc_bias,
+--+    adjust_for_fragment_overlap,
+--+)
+--+
+--+def run():
+--+
+--+    params = load_query_params()
+--+    coverage_mode = params["coverage_mode"]
+--+    variable = params["variable"]
+--+    preset = params["preset"]
+--+    region_input = params["region_input"]
+--+    depth = params["depth"]
+--+    samples = params["samples"]
+--+    duplication = params["duplication"]
+--+    on_target = params["on_target"]
+--+    platform_value = params["platform"]
+--+    runtime_hr = params["runtime_hr"]
+--+    apply_complexity = params["apply_complexity"]
+--+    apply_gc_bias = params["apply_gc_bias"]
+--+    gc_bias_percent = params["gc_bias_percent"]
+--+    apply_fragment_model = params["apply_fragment_model"]
+--+    fragment_size = params["fragment_size"]
+--+    read_length = params["read_length"]
+--+    num_amplicons = params["num_amplicons"]
+--+    amplicon_size = params["amplicon_size"]
+--+
+--+
+--+    st.title("Sequencing Coverage Calculator")
+--+
+--+    result_placeholder = st.empty()
+--+    result_dl_placeholder = st.empty()
+--+    warning_placeholder = st.empty()
+--+
+--+    output_text = None
+--+
+--+    col_cov, col_var = st.columns(2)
+--+    with col_cov:
+--+        coverage_mode = st.segmented_control(
+--+            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+--+            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+--+            default="Targeted Panel")
+--+    with col_var:
+--+        variable = st.segmented_control(
+--+            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+--+            help="Pick which variable you'd like to solve for, given your other inputs.",
+--+            default="Samples per flow cell")
+--+
+--+    col_preset, col_settings = st.columns(2)
+--+    with col_preset:
+--+        preset = st.selectbox(
+--+            "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
+--+            help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
+--+
+--+
+--+    with col_settings:
+--+        if preset != "Custom":
+--+            preset_values = PRESETS[preset]
+--+            duplication = preset_values.duplication_pct
+--+            on_target = preset_values.on_target_pct
+--+            if coverage_mode == "Genome-wide":
+--+                region_input = format_region_size(preset_values.region_bp)
+--+            else:
+--+                num_amplicons = preset_values.amplicon_count or 1380
+--+                amplicon_size = round(preset_values.region_bp / num_amplicons)
+--+        else:
+--+            col_dup, col_target = st.columns(2)
+--+            with col_dup: duplication = st.number_input(
+--+                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
+--+                help="Fraction of reads that are duplicates (e.g., from PCR).")
+--+            with col_target: on_target = st.number_input(
+--+                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
+--+                help="Proportion of reads that align to your region of interest.")
+--+
+--+    col_size, col_depth, col_samples = st.columns(3)
+--+
+--+    with col_size:
+--+        with st.container(border=True):
+--+            if coverage_mode == "Targeted Panel":
+--+                col_n_amp, col_amp_size = st.columns(2)
+--+                with col_n_amp: num_amplicons = st.number_input(
+--+                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
+--+                    help="Total number of amplicons designed in the panel.")
+--+                with col_amp_size: amplicon_size = st.number_input(
+--+                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
+--+                    help="Average base pair length of individual amplicons.")
+--+                region_size = num_amplicons * amplicon_size
+--+                st.caption(f"Total region size: {format_region_size(region_size)}")
+--+            else:
+--+                region_input = st.text_input(
+--+                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
+--+                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
+--+                region_size = parse_region_size(region_input) if region_input else 1
+--+
+--+    with col_depth:
+--+        with st.container(border=True):
+--+            depth = st.number_input(
+--+                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
+--+                help="Desired average sequencing depth per base.")
+--+            if coverage_mode == "Targeted Panel" and depth < 100:
+--+                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
+--+            if coverage_mode == "Genome-wide" and depth < 20:
+--+                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
+--+    with col_samples:
+--+        with st.container(border=True): samples = st.number_input(
+--+            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
+--+            help="Number of samples to be run on a single flow cell.")
+--+
+--+    platform = st.selectbox(
+--+        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
+--+        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
+--+    output_bp = PLATFORM_OUTPUT[platform]
+--+
+--+    if platform == Platform.MINION:
+--+        runtime_hr = st.slider(
+--+            "MinION Runtime (hrs)", 0, 72, 48,
+--+            help="Run duration in hours. Affects total base output for MinION flow cells.")
+--+        output_bp = 3_472_222 * runtime_hr * 60
+--+        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
+--+
+--+    with st.expander("Advanced Modeling Options", expanded=False):
+--+        if coverage_mode == "Genome-wide":
+--+            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
+--+        else:
+--+            apply_complexity = False
+--+
+--+        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
+--+        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
+--+
+--+        if apply_fragment_model:
+--+            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
+--+            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
+--+        else:
+--+            fragment_size = None
+--+            read_length = None
+--+
+--+        if apply_gc_bias:
+--+            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
+--+        else:
+--+            gc_bias_percent = 0.0
+--+
+--+    usable_fraction = (1 - duplication / 100) * (on_target / 100)
+--+    total_bp = output_bp
+--+
+--+    if apply_fragment_model:
+--+        total_bp = adjust_for_fragment_overlap(total_bp, read_length, fragment_size)
+--+    if apply_complexity:
+--+        total_bp = lander_waterman_effective_coverage(region_size, total_bp)
+--+    if apply_gc_bias:
+--+        total_bp = adjust_for_gc_bias(total_bp, gc_bias_percent / 100)
+--+
+--+    calc = CoverageCalculator(
+--+        region_size_bp=region_size,
+--+        depth=depth,
+--+        samples=samples,
+--+        output_bp=total_bp,
+--+        duplication_pct=0,
+--+        on_target_pct=100,
+--+    )
+--+
+--+    if variable == "Samples per flow cell":
+--+        result = calc.calc_samples_per_flow_cell()
+--+        label = "Samples per Flow Cell"
+--+        value = f"{result:.1f}"
+--+        if coverage_mode == "Targeted Panel":
+--+            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
+--+        else:
+--+            delta = f"at {depth:.1f}X genome-wide"
+--+
+--+    elif variable == "Depth":
+--+        result = calc.calc_depth()
+--+        label = "Estimated Depth"
+--+        value = f"{result:.1f}X"
+--+        if coverage_mode == "Targeted Panel":
+--+            delta = f"Per amplicon across {samples} samples"
+--+        else:
+--+            delta = f"Genome-wide across {samples} samples"
+--+
+--+    elif variable == "Genome size":
+--+        result = calc.calc_genome_size()
+--+        label = "Supported Region Size"
+--+        value = format_region_size(int(result))
+--+        delta = f"at {depth:.1f}X depth for {samples} samples"
+--+
+--+    with result_placeholder:
+--+        st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
+--+
+--+    # --- Warnings ---
+--+    if variable == "Samples per flow cell" and result < 1:
+--+        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
+--+
+--+    if variable == "Depth" and result > 1000:
+--+        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
+--+
+--+    if total_bp < 1_000_000:
+--+        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
+--+
+--+    update_query_params({
+--+        "coverage_mode": coverage_mode,
+--+        "variable": variable,
+--+        "preset": preset,
+--+        "region_input": region_input,
+--+        "depth": depth,
+--+        "samples": samples,
+--+        "duplication": duplication,
+--+        "on_target": on_target,
+--+        "platform": platform.value,
+--+        "runtime_hr": runtime_hr,
+--+        "apply_complexity": apply_complexity,
+--+        "apply_gc_bias": apply_gc_bias,
+--+        "gc_bias_percent": gc_bias_percent,
+--+        "apply_fragment_model": apply_fragment_model,
+--+        "fragment_size": fragment_size,
+--+        "read_length": read_length,
+--+        "num_amplicons": num_amplicons,
+--+        "amplicon_size": amplicon_size,
+--+    })# utils/unit_parser.py
+--+
+--+def parse_region_size(input_str: str) -> int:
+--+    """
+--+    Parse strings like '3.3Gb', '500 Kbp', '1.2M', '1000000' into integer bp.
+--+    Returns size in base pairs (bp).
+--+    """
+--+    input_str = input_str.strip().replace(" ", "").lower()
+--+
+--+    suffix_map = {
+--+        "g": 1_000_000_000,
+--+        "gb": 1_000_000_000,
+--+        "m": 1_000_000,
+--+        "mb": 1_000_000,
+--+        "k": 1_000,
+--+        "kb": 1_000,
+--+        "bp": 1,
+--+        "b": 1
+--+    }
+--+
+--+    for suffix, factor in suffix_map.items():
+--+        if input_str.endswith(suffix):
+--+            num_str = input_str[:-len(suffix)]
+--+            break
+--+    else:
+--+        num_str = input_str
+--+        factor = 1
+--+
+--+    try:
+--+        value = float(num_str)
+--+    except ValueError:
+--+        raise ValueError(f"Could not parse region size from input: '{input_str}'")
+--+
+--+    return int(value * factor)
+--+
+--+def format_region_size(bp: int, precision: int = 2) -> str:
+--+    """
+--+    Convert an integer bp value into a human-readable string (e.g., 3.3 Gb).
+--+    """
+--+    thresholds = [
+--+        (1_000_000_000, "Gb"),
+--+        (1_000_000, "Mb"),
+--+        (1_000, "Kb"),
+--+    ]
+--+
+--+    for factor, label in thresholds:
+--+        if bp >= factor:
+--+            value = round(bp / factor, precision)
+--+            return f"{value} {label}"
+--+
+--+    return f"{bp} bp"
+--+import streamlit as st
+--+import json
+--+import base64
+--+
+--+def safe_cast(val, to_type, default):
+--+    try:
+--+        return to_type(val)
+--+    except (ValueError, TypeError):
+--+        return default
+--+
+--+def encode_config(params: dict) -> str:
+--+    json_str = json.dumps(params)
+--+    return base64.urlsafe_b64encode(json_str.encode()).decode()
+--+
+--+def decode_config(encoded: str) -> dict:
+--+    try:
+--+        if not encoded or encoded in ["null", "None"]:
+--+            return {}
+--+        # Fix padding if needed
+--+        missing_padding = len(encoded) % 4
+--+        if missing_padding:
+--+            encoded += "=" * (4 - missing_padding)
+--+        decoded = base64.urlsafe_b64decode(encoded.encode()).decode()
+--+        return json.loads(decoded)
+--+    except Exception as e:
+--+        st.warning("⚠️ Could not parse the configuration string.")
+--+        print(f"[decode_config error] {e}")
+--+        return {}
+--+
+--+def load_query_params():
+--+    q = st.query_params
+--+    encoded_config = q.get("config")
+--+
+--+    if encoded_config:
+--+        params = decode_config(encoded_config)
+--+    else:
+--+        params = {}
+--+
+--+    return {
+--+        "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
+--+        "variable": params.get("variable", "Samples per flow cell"),
+--+        "preset": params.get("preset", "Custom"),
+--+        "region_input": params.get("region_input", "3.3 Gb"),
+--+        "depth": safe_cast(params.get("depth"), float, 30),
+--+        "samples": safe_cast(params.get("samples"), int, 1),
+--+        "duplication": safe_cast(params.get("duplication"), float, 2.5),
+--+        "on_target": safe_cast(params.get("on_target"), int, 85),
+--+        "platform": params.get("platform", "NovaSeq 6000"),
+--+        "runtime_hr": safe_cast(params.get("runtime_hr"), int, 48),
+--+        "apply_complexity": params.get("apply_complexity", False),
+--+        "apply_gc_bias": params.get("apply_gc_bias", False),
+--+        "gc_bias_percent": safe_cast(params.get("gc_bias_percent"), float, 5.0),
+--+        "apply_fragment_model": params.get("apply_fragment_model", False),
+--+        "fragment_size": safe_cast(params.get("fragment_size"), int, 300),
+--+        "read_length": safe_cast(params.get("read_length"), int, 150),
+--+        "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
+--+        "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
+--+    }
+--+
+--+def update_query_params(params: dict):
+--+    encoded = encode_config(params)
+--+    st.query_params["config"] = encoded
+--+# coverage_calculator/calculator/modeling.py
+--+
+--+import math
+--+
+--+def lander_waterman_effective_coverage(genome_size_bp: int, total_bases: float) -> float:
+--+    """
+--+    Estimate the effective coverage using the Lander-Waterman model.
+--+    Returns the number of unique bases expected to be covered.
+--+    """
+--+    if genome_size_bp <= 0:
+--+        return 0
+--+    return genome_size_bp * (1 - math.exp(-total_bases / genome_size_bp))
+--+
+--+
+--+def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> float:
+--+    """
+--+    Reduce effective coverage by a factor to simulate GC/sequence bias.
+--+    Example: 0.05 = 5% reduction in usable coverage.
+--+    """
+--+    return effective_bp * (1 - gc_dropout_factor)
+--+
+--+
+--+def adjust_for_fragment_overlap(total_bases: float, read_length: int, fragment_size: int) -> float:
+--+    """
+--+    Estimate the true usable base pairs based on fragment overlap.
+--+    If reads overlap heavily (PE reads longer than fragments), subtract redundancy.
+--+    """
+--+    if fragment_size <= 0 or read_length <= 0:
+--+        return total_bases
+--+
+--+    # PE overlap estimation
+--+    if 2 * read_length > fragment_size:
+--+        redundancy_factor = (2 * read_length - fragment_size) / (2 * read_length)
+--+        return total_bases * (1 - redundancy_factor)
+--+    return total_bases
+--+# coverage_calculator/calculator/coverage_model.py
+--+
+--+class CoverageCalculator:
+--+    def __init__(self, *, region_size_bp: int, depth: float, samples: int,
+--+                 output_bp: float, duplication_pct: float, on_target_pct: float):
+--+        self.region_size_bp = region_size_bp
+--+        self.depth = depth
+--+        self.samples = samples
+--+        self.output_bp = output_bp
+--+        self.duplication_pct = duplication_pct
+--+        self.on_target_pct = on_target_pct
+--+
+--+    def _effective_yield_fraction(self) -> float:
+--+        """
+--+        Returns the fraction of usable reads after duplication and on-target filtering.
+--+        """
+--+        return (1 - self.duplication_pct / 100.0) * (self.on_target_pct / 100.0)
+--+
+--+    def calc_samples_per_flow_cell(self) -> float:
+--+        """
+--+        Returns number of samples supported per flow cell.
+--+        """
+--+        total_required = self.region_size_bp * self.depth / self._effective_yield_fraction()
+--+        return self.output_bp / total_required
+--+
+--+    def calc_depth(self) -> float:
+--+        """
+--+        Returns achievable depth for given number of samples.
+--+        """
+--+        per_sample_output = self.output_bp / self.samples
+--+        return per_sample_output * self._effective_yield_fraction() / self.region_size_bp
+--+
+--+    def calc_genome_size(self) -> float:
+--+        """
+--+        Returns the maximum genome size (in bp) that can be covered at the specified depth.
+--+        """
+--+        usable_per_sample = (self.output_bp / self.samples) * self._effective_yield_fraction()
+--+        return usable_per_sample / self.depth
+--+# coverage_calculator/config/platforms.py
+--+
+--+from enum import Enum
+--+
+--+class Platform(str, Enum):
+--+    MISEQ_V3 = "MiSeq v3 (2x300)"
+--+    MISEQ_V2 = "MiSeq v2 (2x250)"
+--+    MISEQ_NANO = "MiSeq v2 Nano (2x250)"
+--+    MISEQ_MICRO = "MiSeq v2 Micro (2x150)"
+--+    MINION = "MinION FLO-MIN114"
+--+
+--+# Static outputs (bp)
+--+PLATFORM_OUTPUT = {
+--+    Platform.MISEQ_V3: 15_000_000_000,
+--+    Platform.MISEQ_V2: 7_500_000_000,
+--+    Platform.MISEQ_NANO: 600_000_000,
+--+    Platform.MISEQ_MICRO: 2_400_000_000,
+--+    Platform.MINION: 15_000_000_000,  # Placeholder, overridden by runtime model
+--+}
+--+# coverage_calculator/config/presets.py
+--+
+--+from dataclasses import dataclass
+--+
+--+@dataclass
+--+class ProtocolPreset:
+--+    label: str
+--+    region_bp: int
+--+    duplication_pct: float
+--+    on_target_pct: float
+--+    amplicon_count: int = None
+--+
+--+PRESETS = {
+--+    "WGS (Human)": ProtocolPreset("WGS (Human)", 3_300_000_000, 2.5, 100),
+--+    "Exome (Human)": ProtocolPreset("Exome (Human)", 50_000_000, 15.0, 80),
+--+    "Amplicon Panel": ProtocolPreset("Amplicon Panel", 400_000, 10.0, 90),
+--+    "Bacterial WGS": ProtocolPreset("Bacterial WGS", 5_000_000, 2.0, 100),
+--+}
+--+# streamlit_app.py
+--+
+--+import streamlit as st
+--+from interface.main_app import run as run_calculator_ui
+--+
+--+APP_NAME = "Coverage Calculator"
+--+APP_VERSION = "0.1.0"
+--+APP_AUTHOR = "Erick Samera"
+--+APP_COMMENT = "Streamlined sequencing coverage calculator"
+--+
+--+# Define pages using st.Page
+--+pages = [
+--+    st.Page(run_calculator_ui, title="Calculator", icon="", default=True),
+--+    # Add more pages here as needed
+--+]
+--+
+--+# Set up navigation
+--+selected_page = st.navigation(pages)
+--+
+--+# Optional: Set consistent page config across all pages
+--+st.set_page_config(page_title=APP_NAME, page_icon="", layout="wide")
+--+
+--+# Sidebar branding
+--+with st.sidebar:
+--+    st.title(f"{APP_NAME}")
+--+    st.caption(f"@{APP_AUTHOR} | v{APP_VERSION}")
+--+    st.caption(APP_COMMENT)
+--+    st.markdown("---")
+--+
+--+# Run the selected page
+--+selected_page.run()
+--
+--diff --git a/coverage_calculator/__init__.py b/coverage_calculator/__init__.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/__init__.py
+--
+--diff --git a/coverage_calculator/calculator/__init__.py b/coverage_calculator/calculator/__init__.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/calculator/__init__.py
+--
+--diff --git a/coverage_calculator/calculator/coverage_model.py b/coverage_calculator/calculator/coverage_model.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/calculator/coverage_model.py
+--+# coverage_calculator/calculator/coverage_model.py
+--+
+--+class CoverageCalculator:
+--+    def __init__(self, *, region_size_bp: int, depth: float, samples: int,
+--+                 output_bp: float, duplication_pct: float, on_target_pct: float):
+--+        self.region_size_bp = region_size_bp
+--+        self.depth = depth
+--+        self.samples = samples
+--+        self.output_bp = output_bp
+--+        self.duplication_pct = duplication_pct
+--+        self.on_target_pct = on_target_pct
+--+
+--+    def _effective_yield_fraction(self) -> float:
+--+        """
+--+        Returns the fraction of usable reads after duplication and on-target filtering.
+--+        """
+--+        return (1 - self.duplication_pct / 100.0) * (self.on_target_pct / 100.0)
+--+
+--+    def calc_samples_per_flow_cell(self) -> float:
+--+        """
+--+        Returns number of samples supported per flow cell.
+--+        """
+--+        total_required = self.region_size_bp * self.depth / self._effective_yield_fraction()
+--+        return self.output_bp / total_required
+--+
+--+    def calc_depth(self) -> float:
+--+        """
+--+        Returns achievable depth for given number of samples.
+--+        """
+--+        per_sample_output = self.output_bp / self.samples
+--+        return per_sample_output * self._effective_yield_fraction() / self.region_size_bp
+--+
+--+    def calc_genome_size(self) -> float:
+--+        """
+--+        Returns the maximum genome size (in bp) that can be covered at the specified depth.
+--+        """
+--+        usable_per_sample = (self.output_bp / self.samples) * self._effective_yield_fraction()
+--+        return usable_per_sample / self.depth
+--
+--diff --git a/coverage_calculator/calculator/modeling.py b/coverage_calculator/calculator/modeling.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/calculator/modeling.py
+--+# coverage_calculator/calculator/modeling.py
+--+
+--+import math
+--+
+--+def lander_waterman_effective_coverage(genome_size_bp: int, total_bases: float) -> float:
+--+    """
+--+    Estimate the effective coverage using the Lander-Waterman model.
+--+    Returns the number of unique bases expected to be covered.
+--+    """
+--+    if genome_size_bp <= 0:
+--+        return 0
+--+    return genome_size_bp * (1 - math.exp(-total_bases / genome_size_bp))
+--+
+--+
+--+def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> float:
+--+    """
+--+    Reduce effective coverage by a factor to simulate GC/sequence bias.
+--+    Example: 0.05 = 5% reduction in usable coverage.
+--+    """
+--+    return effective_bp * (1 - gc_dropout_factor)
+--+
+--+
+--+def adjust_for_fragment_overlap(total_bases: float, read_length: int, fragment_size: int) -> float:
+--+    """
+--+    Estimate the true usable base pairs based on fragment overlap.
+--+    If reads overlap heavily (PE reads longer than fragments), subtract redundancy.
+--+    """
+--+    if fragment_size <= 0 or read_length <= 0:
+--+        return total_bases
+--+
+--+    # PE overlap estimation
+--+    if 2 * read_length > fragment_size:
+--+        redundancy_factor = (2 * read_length - fragment_size) / (2 * read_length)
+--+        return total_bases * (1 - redundancy_factor)
+--+    return total_bases
+--
+--diff --git a/coverage_calculator/config/__init__.py b/coverage_calculator/config/__init__.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/config/__init__.py
+--
+--diff --git a/coverage_calculator/config/platforms.py b/coverage_calculator/config/platforms.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/config/platforms.py
+--+# coverage_calculator/config/platforms.py
+--+
+--+from enum import Enum
+--+
+--+class Platform(str, Enum):
+--+    MISEQ_V3 = "MiSeq v3 (2x300)"
+--+    MISEQ_V2 = "MiSeq v2 (2x250)"
+--+    MISEQ_NANO = "MiSeq v2 Nano (2x250)"
+--+    MISEQ_MICRO = "MiSeq v2 Micro (2x150)"
+--+    MINION = "MinION FLO-MIN114"
+--+
+--+# Static outputs (bp)
+--+PLATFORM_OUTPUT = {
+--+    Platform.MISEQ_V3: 15_000_000_000,
+--+    Platform.MISEQ_V2: 7_500_000_000,
+--+    Platform.MISEQ_NANO: 600_000_000,
+--+    Platform.MISEQ_MICRO: 2_400_000_000,
+--+    Platform.MINION: 15_000_000_000,  # Placeholder, overridden by runtime model
+--+}
+--
+--diff --git a/coverage_calculator/config/presets.py b/coverage_calculator/config/presets.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/config/presets.py
+--+# coverage_calculator/config/presets.py
+--+
+--+from dataclasses import dataclass
+--+
+--+@dataclass
+--+class ProtocolPreset:
+--+    label: str
+--+    region_bp: int
+--+    duplication_pct: float
+--+    on_target_pct: float
+--+    amplicon_count: int = None
+--+
+--+PRESETS = {
+--+    "WGS (Human)": ProtocolPreset("WGS (Human)", 3_300_000_000, 2.5, 100),
+--+    "Exome (Human)": ProtocolPreset("Exome (Human)", 50_000_000, 15.0, 80),
+--+    "Amplicon Panel": ProtocolPreset("Amplicon Panel", 400_000, 10.0, 90),
+--+    "Bacterial WGS": ProtocolPreset("Bacterial WGS", 5_000_000, 2.0, 100),
+--+}
+--
+--diff --git a/coverage_calculator/utils/__init__.py b/coverage_calculator/utils/__init__.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/utils/__init__.py
+--
+--diff --git a/coverage_calculator/utils/query_state.py b/coverage_calculator/utils/query_state.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/utils/query_state.py
+--+import streamlit as st
+--+import json
+--+import base64
+--+
+--+def safe_cast(val, to_type, default):
+--+    try:
+--+        return to_type(val)
+--+    except (ValueError, TypeError):
+--+        return default
+--+
+--+def encode_config(params: dict) -> str:
+--+    json_str = json.dumps(params)
+--+    return base64.urlsafe_b64encode(json_str.encode()).decode()
+--+
+--+def decode_config(encoded: str) -> dict:
+--+    try:
+--+        if not encoded or encoded in ["null", "None"]:
+--+            return {}
+--+        # Fix padding if needed
+--+        missing_padding = len(encoded) % 4
+--+        if missing_padding:
+--+            encoded += "=" * (4 - missing_padding)
+--+        decoded = base64.urlsafe_b64decode(encoded.encode()).decode()
+--+        return json.loads(decoded)
+--+    except Exception as e:
+--+        st.warning("⚠️ Could not parse the configuration string.")
+--+        print(f"[decode_config error] {e}")
+--+        return {}
+--+
+--+def load_query_params():
+--+    q = st.query_params
+--+    encoded_config = q.get("config")
+--+
+--+    if encoded_config:
+--+        params = decode_config(encoded_config)
+--+    else:
+--+        params = {}
+--+
+--+    return {
+--+        "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
+--+        "variable": params.get("variable", "Samples per flow cell"),
+--+        "preset": params.get("preset", "Custom"),
+--+        "region_input": params.get("region_input", "3.3 Gb"),
+--+        "depth": safe_cast(params.get("depth"), float, 30),
+--+        "samples": safe_cast(params.get("samples"), int, 1),
+--+        "duplication": safe_cast(params.get("duplication"), float, 2.5),
+--+        "on_target": safe_cast(params.get("on_target"), int, 85),
+--+        "platform": params.get("platform", "NovaSeq 6000"),
+--+        "runtime_hr": safe_cast(params.get("runtime_hr"), int, 48),
+--+        "apply_complexity": params.get("apply_complexity", False),
+--+        "apply_gc_bias": params.get("apply_gc_bias", False),
+--+        "gc_bias_percent": safe_cast(params.get("gc_bias_percent"), float, 5.0),
+--+        "apply_fragment_model": params.get("apply_fragment_model", False),
+--+        "fragment_size": safe_cast(params.get("fragment_size"), int, 300),
+--+        "read_length": safe_cast(params.get("read_length"), int, 150),
+--+        "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
+--+        "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
+--+    }
+--+
+--+def update_query_params(params: dict):
+--+    encoded = encode_config(params)
+--+    st.query_params["config"] = encoded
+--
+--diff --git a/coverage_calculator/utils/unit_parser.py b/coverage_calculator/utils/unit_parser.py
+--new file mode 100644
+----- /dev/null
+--+++ b/coverage_calculator/utils/unit_parser.py
+--+# utils/unit_parser.py
+--+
+--+def parse_region_size(input_str: str) -> int:
+--+    """
+--+    Parse strings like '3.3Gb', '500 Kbp', '1.2M', '1000000' into integer bp.
+--+    Returns size in base pairs (bp).
+--+    """
+--+    input_str = input_str.strip().replace(" ", "").lower()
+--+
+--+    suffix_map = {
+--+        "g": 1_000_000_000,
+--+        "gb": 1_000_000_000,
+--+        "m": 1_000_000,
+--+        "mb": 1_000_000,
+--+        "k": 1_000,
+--+        "kb": 1_000,
+--+        "bp": 1,
+--+        "b": 1
+--+    }
+--+
+--+    for suffix, factor in suffix_map.items():
+--+        if input_str.endswith(suffix):
+--+            num_str = input_str[:-len(suffix)]
+--+            break
+--+    else:
+--+        num_str = input_str
+--+        factor = 1
+--+
+--+    try:
+--+        value = float(num_str)
+--+    except ValueError:
+--+        raise ValueError(f"Could not parse region size from input: '{input_str}'")
+--+
+--+    return int(value * factor)
+--+
+--+def format_region_size(bp: int, precision: int = 2) -> str:
+--+    """
+--+    Convert an integer bp value into a human-readable string (e.g., 3.3 Gb).
+--+    """
+--+    thresholds = [
+--+        (1_000_000_000, "Gb"),
+--+        (1_000_000, "Mb"),
+--+        (1_000, "Kb"),
+--+    ]
+--+
+--+    for factor, label in thresholds:
+--+        if bp >= factor:
+--+            value = round(bp / factor, precision)
+--+            return f"{value} {label}"
+--+
+--+    return f"{bp} bp"
+--
+--diff --git a/generate_git_dif.py b/generate_git_dif.py
+--new file mode 100644
+----- /dev/null
+--+++ b/generate_git_dif.py
+--+import subprocess
+--+import os
+--+
+--+def get_diff_vs_head():
+--+    """Returns full diff against HEAD (staged + unstaged)."""
+--+    return subprocess.check_output(["git", "diff", "HEAD"]).decode("utf-8")
+--+
+--+def get_untracked_files():
+--+    """Returns a list of untracked (new) files."""
+--+    files = subprocess.check_output(
+--+        ["git", "ls-files", "--others", "--exclude-standard"]
+--+    ).decode("utf-8").splitlines()
+--+    return [f for f in files if os.path.isfile(f)]
+--+
+--+def render_untracked_as_diff(files):
+--+    """Generates diff-style output for untracked files."""
+--+    result = []
+--+    for filepath in files:
+--+        result.append(f"diff --git a/{filepath} b/{filepath}")
+--+        result.append(f"new file mode 100644")
+--+        result.append(f"--- /dev/null")
+--+        result.append(f"+++ b/{filepath}")
+--+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+--+            for line in f:
+--+                result.append(f"+{line.rstrip()}")
+--+        result.append("")  # newline between files
+--+    return "\n".join(result)
+--+
+--+def write_diff_to_markdown(diff_output, output_path="git_diff_summary.md"):
+--+    with open(output_path, "w") as f:
+--+        f.write("# 🧾 Git Diff Summary (vs HEAD)\n\n")
+--+        f.write("```diff\n")
+--+        f.write(diff_output.strip())
+--+        f.write("\n```\n")
+--+    print(f"✅ Diff written to: {output_path}")
+--+
+--+if __name__ == "__main__":
+--+    diff = get_diff_vs_head()
+--+    untracked = get_untracked_files()
+--+    diff += "\n" + render_untracked_as_diff(untracked)
+--+    write_diff_to_markdown(diff)
+--
+--diff --git a/git_diff_summary.md b/git_diff_summary.md
+--new file mode 100644
+----- /dev/null
+--+++ b/git_diff_summary.md
+--+# 🧾 Git Diff Summary (vs HEAD)
+--+
+--+```diff
+--+diff --git a/README.md b/README.md
+--+index 0ecf3c9..89eca66 100644
+--+--- a/README.md
+--++++ b/README.md
+--+@@ -1 +1,27 @@
+--+-# coverage-calculator
+--+\ No newline at end of file
+--++# Sequencing Coverage Calculator
+--++
+--++A Streamlit-based app to estimate sequencing coverage metrics such as:
+--++
+--++- Samples per flow cell
+--++- Depth per sample
+--++- Supported region size
+--++
+--++Supports both **genome-wide** and **targeted panel** sequencing.
+--++
+--++## Features
+--++
+--++- Platform presets for MiSeq, MinION, NovaSeq, etc.
+--++- Protocol presets (e.g. AmpliSeq-style panels)
+--++- Modeling options:
+--++  - Lander-Waterman library complexity
+--++  - GC bias
+--++  - Fragment/read overlap
+--++- Base64-encoded config sharing (via URL or paste)
+--++- Live warnings and result formatting
+--++- Exportable config string for reproducibility
+--++
+--++
+--++## Example Use Cases
+--++- AmpliSeq panel planning
+--++- WGS depth estimation
+--++- Flow cell sample budgeting
+--+\ No newline at end of file
+--+```
+--+
+--+## 🆕 Untracked Files
+--+
+--+```text
+--+?? codebase.py.txt
+--+?? coverage_calculator/__init__.py
+--+?? coverage_calculator/calculator/__init__.py
+--+?? coverage_calculator/calculator/coverage_model.py
+--+?? coverage_calculator/calculator/modeling.py
+--+?? coverage_calculator/config/__init__.py
+--+?? coverage_calculator/config/platforms.py
+--+?? coverage_calculator/config/presets.py
+--+?? coverage_calculator/utils/__init__.py
+--+?? coverage_calculator/utils/query_state.py
+--+?? coverage_calculator/utils/unit_parser.py
+--+?? generate_git_dif.py
+--+?? interface/__init__.py
+--+?? interface/main_app.py
+--+?? streamlit_app.py
+--+```
+--
+--diff --git a/interface/__init__.py b/interface/__init__.py
+--new file mode 100644
+----- /dev/null
+--+++ b/interface/__init__.py
+--
+- diff --git a/interface/main_app.py b/interface/main_app.py
+--new file mode 100644
+----- /dev/null
+-+index 921f9fb..174db48 100644
+-+--- a/interface/main_app.py
+- +++ b/interface/main_app.py
+--+import streamlit as st
+--+import json
+--+
+--+from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
+--+from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
+--+from coverage_calculator.calculator.coverage_model import CoverageCalculator
+--+from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
+--+from coverage_calculator.config.presets import PRESETS
+--+from coverage_calculator.calculator.modeling import (
+--+    lander_waterman_effective_coverage,
+--+    adjust_for_gc_bias,
+--+    adjust_for_fragment_overlap,
+-+@@ -2,7 +2,9 @@ import streamlit as st
+-+ import json
+-+ 
+-+ from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
+-+-from coverage_calculator.utils.query_state import load_query_params, update_query_params, decode_config, encode_config
+-++from coverage_calculator.utils.query_state import (
+-++    load_query_params, update_query_params, encode_config, decode_config
+- +)
+--+
+--+def run():
+--+
+--+    params = load_query_params()
+--+    coverage_mode = params["coverage_mode"]
+--+    variable = params["variable"]
+--+    preset = params["preset"]
+--+    region_input = params["region_input"]
+--+    depth = params["depth"]
+--+    samples = params["samples"]
+--+    duplication = params["duplication"]
+--+    on_target = params["on_target"]
+--+    platform_value = params["platform"]
+--+    runtime_hr = params["runtime_hr"]
+--+    apply_complexity = params["apply_complexity"]
+--+    apply_gc_bias = params["apply_gc_bias"]
+--+    gc_bias_percent = params["gc_bias_percent"]
+--+    apply_fragment_model = params["apply_fragment_model"]
+--+    fragment_size = params["fragment_size"]
+--+    read_length = params["read_length"]
+--+    num_amplicons = params["num_amplicons"]
+--+    amplicon_size = params["amplicon_size"]
+--+
+--+
+--+    st.title("Sequencing Coverage Calculator")
+--+
+--+    result_placeholder = st.empty()
+--+    result_dl_placeholder = st.empty()
+--+    warning_placeholder = st.empty()
+--+
+--+    output_text = None
+--+
+--+    col_cov, col_var = st.columns(2)
+--+    with col_cov:
+--+        coverage_mode = st.segmented_control(
+--+            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+--+            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+--+            default="Targeted Panel")
+--+    with col_var:
+--+        variable = st.segmented_control(
+--+            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+--+            help="Pick which variable you'd like to solve for, given your other inputs.",
+--+            default="Samples per flow cell")
+--+
+--+    col_preset, col_settings = st.columns(2)
+--+    with col_preset:
+--+        preset = st.selectbox(
+--+            "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
+--+            help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
+--+
+--+
+--+    with col_settings:
+--+        if preset != "Custom":
+--+            preset_values = PRESETS[preset]
+--+            duplication = preset_values.duplication_pct
+--+            on_target = preset_values.on_target_pct
+--+            if coverage_mode == "Genome-wide":
+--+                region_input = format_region_size(preset_values.region_bp)
+--+            else:
+--+                num_amplicons = preset_values.amplicon_count or 1380
+--+                amplicon_size = round(preset_values.region_bp / num_amplicons)
+--+        else:
+--+            col_dup, col_target = st.columns(2)
+--+            with col_dup: duplication = st.number_input(
+--+                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
+--+                help="Fraction of reads that are duplicates (e.g., from PCR).")
+--+            with col_target: on_target = st.number_input(
+--+                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
+--+                help="Proportion of reads that align to your region of interest.")
+--+
+--+    col_size, col_depth, col_samples = st.columns(3)
+--+
+--+    with col_size:
+--+        with st.container(border=True):
+--+            if coverage_mode == "Targeted Panel":
+--+                col_n_amp, col_amp_size = st.columns(2)
+--+                with col_n_amp: num_amplicons = st.number_input(
+--+                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
+--+                    help="Total number of amplicons designed in the panel.")
+--+                with col_amp_size: amplicon_size = st.number_input(
+--+                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
+--+                    help="Average base pair length of individual amplicons.")
+--+                region_size = num_amplicons * amplicon_size
+--+                st.caption(f"Total region size: {format_region_size(region_size)}")
+--+            else:
+--+                region_input = st.text_input(
+--+                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
+--+                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
+--+                region_size = parse_region_size(region_input) if region_input else 1
+--+
+--+    with col_depth:
+--+        with st.container(border=True):
+--+            depth = st.number_input(
+--+                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
+--+                help="Desired average sequencing depth per base.")
+--+            if coverage_mode == "Targeted Panel" and depth < 100:
+--+                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
+--+            if coverage_mode == "Genome-wide" and depth < 20:
+--+                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
+--+    with col_samples:
+--+        with st.container(border=True): samples = st.number_input(
+--+            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
+--+            help="Number of samples to be run on a single flow cell.")
+--+
+--+    platform = st.selectbox(
+--+        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
+--+        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
+--+    output_bp = PLATFORM_OUTPUT[platform]
+--+
+--+    if platform == Platform.MINION:
+--+        runtime_hr = st.slider(
+--+            "MinION Runtime (hrs)", 0, 72, 48,
+--+            help="Run duration in hours. Affects total base output for MinION flow cells.")
+--+        output_bp = 3_472_222 * runtime_hr * 60
+--+        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
+--+
+--+    with st.expander("Advanced Modeling Options", expanded=False):
+-+ from coverage_calculator.calculator.coverage_model import CoverageCalculator
+-+ from coverage_calculator.config.platforms import Platform, PLATFORM_OUTPUT
+-+ from coverage_calculator.config.presets import PRESETS
+-+@@ -13,47 +15,38 @@ from coverage_calculator.calculator.modeling import (
+-+ )
+-+ 
+-+ def run():
+-+-
+-+     params = load_query_params()
+-+-    coverage_mode = params["coverage_mode"]
+-+-    variable = params["variable"]
+-+-    preset = params["preset"]
+-+-    region_input = params["region_input"]
+-+-    depth = params["depth"]
+-+-    samples = params["samples"]
+-+-    duplication = params["duplication"]
+-+-    on_target = params["on_target"]
+-+-    platform_value = params["platform"]
+-+-    runtime_hr = params["runtime_hr"]
+-+-    apply_complexity = params["apply_complexity"]
+-+-    apply_gc_bias = params["apply_gc_bias"]
+-+-    gc_bias_percent = params["gc_bias_percent"]
+-+-    apply_fragment_model = params["apply_fragment_model"]
+-+-    fragment_size = params["fragment_size"]
+-+-    read_length = params["read_length"]
+-+-    num_amplicons = params["num_amplicons"]
+-+-    amplicon_size = params["amplicon_size"]
+-+-
+-+-
+-+     st.title("Sequencing Coverage Calculator")
+-+ 
+-++    # -- Paste Config Modal
+-++    @st.dialog("Paste Configuration Code")
+-++    def paste_config_dialog():
+-++        config_input = st.text_area("Paste configuration string here (base64-encoded):", height=150)
+-++        if st.button("Apply Configuration"):
+-++            config = decode_config(config_input.strip())
+-++            if config:
+-++                for k, v in config.items():
+-++                    st.session_state[k] = v
+-++                st.success("✅ Configuration applied. Reloading...")
+-++                st.rerun()
+-++
+-++    if st.button("🧩 Paste Configuration Code"):
+-++        paste_config_dialog()
+-++
+-+     result_placeholder = st.empty()
+-+     result_dl_placeholder = st.empty()
+-+     warning_placeholder = st.empty()
+-+ 
+-+-    output_text = None
+-++    # Load initial state from query or use defaults
+-++    coverage_mode = st.segmented_control(
+-++        "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+-++        help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+-++        default=params["coverage_mode"])
+-+ 
+-+-    col_cov, col_var = st.columns(2)
+-+-    with col_cov:
+-+-        coverage_mode = st.segmented_control(
+-+-            "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+-+-            help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+-+-            default="Targeted Panel")
+-+-    with col_var:
+-+-        variable = st.segmented_control(
+-+-            "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+-+-            help="Pick which variable you'd like to solve for, given your other inputs.",
+-+-            default="Samples per flow cell")
+-++    variable = st.segmented_control(
+-++        "Variable to calculate:", ["Samples per flow cell", "Depth", "Genome size"],
+-++        help="Pick which variable you'd like to solve for, given your other inputs.",
+-++        default=params["variable"])
+-+ 
+-+     col_preset, col_settings = st.columns(2)
+-+     with col_preset: 
+-+@@ -61,25 +54,21 @@ def run():
+-+             "Protocol Preset", ["Custom"] + list(PRESETS), index=0,
+-+             help="Select a common protocol to auto-fill recommended parameters like region size, duplication, and on-target rate.")
+-+ 
+-+-
+-+-    with col_settings:
+-+-        if preset != "Custom":
+-+-            preset_values = PRESETS[preset]
+-+-            duplication = preset_values.duplication_pct
+-+-            on_target = preset_values.on_target_pct
+-+-            if coverage_mode == "Genome-wide":
+-+-                region_input = format_region_size(preset_values.region_bp)
+-+-            else:
+-+-                num_amplicons = preset_values.amplicon_count or 1380
+-+-                amplicon_size = round(preset_values.region_bp / num_amplicons)
+-++    if preset != "Custom":
+-++        preset_values = PRESETS[preset]
+-++        duplication = preset_values.duplication_pct
+-++        on_target = preset_values.on_target_pct
+- +        if coverage_mode == "Genome-wide":
+--+            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
+--+        else:
+--+            apply_complexity = False
+--+
+--+        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
+--+        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
+--+
+--+        if apply_fragment_model:
+--+            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
+--+            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
+--+        else:
+--+            fragment_size = None
+--+            read_length = None
+--+
+--+        if apply_gc_bias:
+--+            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
+--+        else:
+--+            gc_bias_percent = 0.0
+--+
+--+    usable_fraction = (1 - duplication / 100) * (on_target / 100)
+--+    total_bp = output_bp
+--+
+--+    if apply_fragment_model:
+--+        total_bp = adjust_for_fragment_overlap(total_bp, read_length, fragment_size)
+--+    if apply_complexity:
+--+        total_bp = lander_waterman_effective_coverage(region_size, total_bp)
+--+    if apply_gc_bias:
+--+        total_bp = adjust_for_gc_bias(total_bp, gc_bias_percent / 100)
+--+
+--+    calc = CoverageCalculator(
+--+        region_size_bp=region_size,
+--+        depth=depth,
+--+        samples=samples,
+--+        output_bp=total_bp,
+--+        duplication_pct=0,
+--+        on_target_pct=100,
+--+    )
+--+
+--+    if variable == "Samples per flow cell":
+--+        result = calc.calc_samples_per_flow_cell()
+--+        label = "Samples per Flow Cell"
+--+        value = f"{result:.1f}"
+--+        if coverage_mode == "Targeted Panel":
+--+            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
+--+        else:
+--+            delta = f"at {depth:.1f}X genome-wide"
+--+
+--+    elif variable == "Depth":
+--+        result = calc.calc_depth()
+--+        label = "Estimated Depth"
+--+        value = f"{result:.1f}X"
+--+        if coverage_mode == "Targeted Panel":
+--+            delta = f"Per amplicon across {samples} samples"
+--+        else:
+--+            delta = f"Genome-wide across {samples} samples"
+--+
+--+    elif variable == "Genome size":
+--+        result = calc.calc_genome_size()
+--+        label = "Supported Region Size"
+--+        value = format_region_size(int(result))
+--+        delta = f"at {depth:.1f}X depth for {samples} samples"
+--+
+--+    with result_placeholder:
+--+        st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
+--+
+--+    # --- Warnings ---
+--+    if variable == "Samples per flow cell" and result < 1:
+--+        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
+--+
+--+    if variable == "Depth" and result > 1000:
+--+        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
+--+
+--+    if total_bp < 1_000_000:
+--+        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
+--+
+--+    update_query_params({
+--+        "coverage_mode": coverage_mode,
+--+        "variable": variable,
+--+        "preset": preset,
+--+        "region_input": region_input,
+--+        "depth": depth,
+--+        "samples": samples,
+--+        "duplication": duplication,
+--+        "on_target": on_target,
+--+        "platform": platform.value,
+--+        "runtime_hr": runtime_hr,
+--+        "apply_complexity": apply_complexity,
+--+        "apply_gc_bias": apply_gc_bias,
+--+        "gc_bias_percent": gc_bias_percent,
+--+        "apply_fragment_model": apply_fragment_model,
+--+        "fragment_size": fragment_size,
+--+        "read_length": read_length,
+--+        "num_amplicons": num_amplicons,
+--+        "amplicon_size": amplicon_size,
+--+    })
+--
+--diff --git a/streamlit_app.py b/streamlit_app.py
+--new file mode 100644
+----- /dev/null
+--+++ b/streamlit_app.py
+--+# streamlit_app.py
+--+
+--+import streamlit as st
+--+from interface.main_app import run as run_calculator_ui
+--+
+--+APP_NAME = "Coverage Calculator"
+--+APP_VERSION = "0.1.0"
+--+APP_AUTHOR = "Erick Samera"
+--+APP_COMMENT = "Streamlined sequencing coverage calculator"
+--+
+--+# Define pages using st.Page
+--+pages = [
+--+    st.Page(run_calculator_ui, title="Calculator", icon="", default=True),
+--+    # Add more pages here as needed
+--+]
+--+
+--+# Set up navigation
+--+selected_page = st.navigation(pages)
+--+
+--+# Optional: Set consistent page config across all pages
+--+st.set_page_config(page_title=APP_NAME, page_icon="", layout="wide")
+--+
+--+# Sidebar branding
+--+with st.sidebar:
+--+    st.title(f"{APP_NAME}")
+--+    st.caption(f"@{APP_AUTHOR} | v{APP_VERSION}")
+--+    st.caption(APP_COMMENT)
+--+    st.markdown("---")
+-++            region_input = format_region_size(preset_values.region_bp)
+-+         else:
+-+-            col_dup, col_target = st.columns(2)
+-+-            with col_dup: duplication = st.number_input(
+-+-                "Duplication (%)", min_value=0.0, max_value=50.0, value=2.5, step=0.5,
+-+-                help="Fraction of reads that are duplicates (e.g., from PCR).")
+-+-            with col_target: on_target = st.number_input(
+-+-                "On-target (%)", min_value=0, max_value=100, value=85, step=1,
+-+-                help="Proportion of reads that align to your region of interest.")
+-++            num_amplicons = preset_values.amplicon_count or 1380
+-++            amplicon_size = round(preset_values.region_bp / num_amplicons)
+-++    else:
+-++        col_dup, col_target = st.columns(2)
+-++        with col_dup:
+-++            duplication = st.number_input("Duplication (%)", min_value=0.0, max_value=50.0, value=params["duplication"], step=0.5)
+-++        with col_target:
+-++            on_target = st.number_input("On-target (%)", min_value=0, max_value=100, value=params["on_target"], step=1)
+-+ 
+-+     col_size, col_depth, col_samples = st.columns(3)
+-+ 
+-+@@ -87,67 +76,60 @@ def run():
+-+         with st.container(border=True):
+-+             if coverage_mode == "Targeted Panel":
+-+                 col_n_amp, col_amp_size = st.columns(2)
+-+-                with col_n_amp: num_amplicons = st.number_input(
+-+-                    "Number of Amplicons", min_value=1, value=num_amplicons if preset != "Custom" else 1380, step=10,
+-+-                    help="Total number of amplicons designed in the panel.")
+-+-                with col_amp_size: amplicon_size = st.number_input(
+-+-                    "Avg Amplicon Size (bp)", min_value=50, value=amplicon_size if preset != "Custom" else 175, step=25,
+-+-                    help="Average base pair length of individual amplicons.")
+-++                with col_n_amp:
+-++                    num_amplicons = st.number_input("Number of Amplicons", min_value=1, value=params["num_amplicons"], step=10)
+-++                with col_amp_size:
+-++                    amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
+-+                 region_size = num_amplicons * amplicon_size
+-+                 st.caption(f"Total region size: {format_region_size(region_size)}")
+-+             else:
+-+-                region_input = st.text_input(
+-+-                    "Genome/Region Size", value=region_input if preset != "Custom" else "3.3 Gb", disabled=variable == "Genome size",
+-+-                    help="Total size of the region being targeted, e.g. '3.3 Gb' for human WGS.")
+-++                region_input = st.text_input("Genome/Region Size", value=params["region_input"], disabled=variable == "Genome size")
+-+                 region_size = parse_region_size(region_input) if region_input else 1
+-+ 
+-+     with col_depth:
+-+         with st.container(border=True): 
+-+-            depth = st.number_input(
+-+-                "Depth (X)", value=30, disabled=variable == "Depth", step=5,
+-+-                help="Desired average sequencing depth per base.")
+-++            depth = st.number_input("Depth (X)", value=params["depth"], disabled=variable == "Depth", step=5)
+-+             if coverage_mode == "Targeted Panel" and depth < 100:
+-+-                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.", icon=":material/info:")
+-++                st.info("For amplicon-based panels, sequencing depths of 500–1000X are typical.")
+-+             if coverage_mode == "Genome-wide" and depth < 20:
+-+-                st.info("Whole genome sequencing, particularly for variant-calling, usually aims for at least 20X.", icon=":material/info:")
+-+-    with col_samples: 
+-+-        with st.container(border=True): samples = st.number_input(
+-+-            "Samples", value=1, step=1, disabled=variable == "Samples per flow cell",
+-+-            help="Number of samples to be run on a single flow cell.")
+-+-
+-+-    platform = st.selectbox(
+-+-        "Sequencing Platform", options=list(Platform), format_func=lambda p: p.value,
+-+-        help="Choose the sequencing system and chemistry you're using. Affects output capacity.")
+-++                st.info("Whole genome sequencing usually aims for at least 20X.")
+- +
+--+# Run the selected page
+--+selected_page.run()
+-++    with col_samples:
+-++        with st.container(border=True):
+-++            samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
+-++
+-++    platform = st.selectbox("Sequencing Platform", options=list(Platform), format_func=lambda p: p.value, index=0)
+-+     output_bp = PLATFORM_OUTPUT[platform]
+-+ 
+-+     if platform == Platform.MINION:
+-+-        runtime_hr = st.slider(
+-+-            "MinION Runtime (hrs)", 0, 72, 48,
+-+-            help="Run duration in hours. Affects total base output for MinION flow cells.")
+-++        runtime_hr = st.slider("MinION Runtime (hrs)", 0, 72, params["runtime_hr"])
+-+         output_bp = 3_472_222 * runtime_hr * 60
+-+-        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime",)
+-++        st.caption(f"Estimated Output: {format_region_size(int(output_bp))} based on runtime")
+-++    else:
+-++        runtime_hr = params["runtime_hr"]
+-+ 
+-+     with st.expander("Advanced Modeling Options", expanded=False):
+-+         if coverage_mode == "Genome-wide":
+-+-            apply_complexity = False #st.checkbox("Model library complexity (Lander-Waterman)", value=False)
+-++            apply_complexity = st.checkbox("Model library complexity (Lander-Waterman)", value=params["apply_complexity"])
+-+         else:
+-+             apply_complexity = False
+-+ 
+-+-        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=False)
+-+-        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=False)
+-++        apply_gc_bias = st.checkbox("Apply GC/sequence bias correction", value=params["apply_gc_bias"])
+-++        apply_fragment_model = st.checkbox("Adjust for fragment/read length overlap", value=params["apply_fragment_model"])
+-+ 
+-+         if apply_fragment_model:
+-+-            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=300)
+-+-            read_length = st.number_input("Read length (bp)", min_value=50, value=150)
+-++            fragment_size = st.number_input("Fragment size (bp)", min_value=50, value=params["fragment_size"])
+-++            read_length = st.number_input("Read length (bp)", min_value=50, value=params["read_length"])
+-+         else:
+-+             fragment_size = None
+-+             read_length = None
+-+ 
+-+         if apply_gc_bias:
+-+-            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, 5.0)
+-++            gc_bias_percent = st.slider("Bias loss (%)", 0.0, 20.0, params["gc_bias_percent"])
+-+         else:
+-+             gc_bias_percent = 0.0
+-+ 
+-++    # --- Calculations ---
+-+     usable_fraction = (1 - duplication / 100) * (on_target / 100)
+-+     total_bp = output_bp
+-+ 
+-+@@ -171,19 +153,13 @@ def run():
+-+         result = calc.calc_samples_per_flow_cell()
+-+         label = "Samples per Flow Cell"
+-+         value = f"{result:.1f}"
+-+-        if coverage_mode == "Targeted Panel":
+-+-            delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons, assuming equal distribution of reads.)"
+-+-        else:
+-+-            delta = f"at {depth:.1f}X genome-wide"
+-++        delta = f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons)" if coverage_mode == "Targeted Panel" else f"at {depth:.1f}X genome-wide"
+-+ 
+-+     elif variable == "Depth":
+-+         result = calc.calc_depth()
+-+         label = "Estimated Depth"
+-+         value = f"{result:.1f}X"
+-+-        if coverage_mode == "Targeted Panel":
+-+-            delta = f"Per amplicon across {samples} samples"
+-+-        else:
+-+-            delta = f"Genome-wide across {samples} samples"
+-++        delta = f"Per amplicon across {samples} samples" if coverage_mode == "Targeted Panel" else f"Genome-wide across {samples} samples"
+-+ 
+-+     elif variable == "Genome size":
+-+         result = calc.calc_genome_size()
+-+@@ -191,18 +167,17 @@ def run():
+-+         value = format_region_size(int(result))
+-+         delta = f"at {depth:.1f}X depth for {samples} samples"
+-+ 
+-++    output_text = f"{label}: {value} ({delta})"
+-++
+-+     with result_placeholder:
+-+         st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
+-+ 
+-+-    # --- Warnings ---
+-+     if variable == "Samples per flow cell" and result < 1:
+-+-        warning_placeholder.warning("Sequencing output is too low for even one sample with current settings.", icon=":material/error:")
+-+-
+-++        warning_placeholder.warning("Sequencing output is too low for even one sample.")
+-+     if variable == "Depth" and result > 1000:
+-+-        warning_placeholder.warning("Depth exceeds 1000X — are you sure this is intentional?", icon=":material/error:")
+-+-
+-++        warning_placeholder.warning("Depth exceeds 1000X.")
+-+     if total_bp < 1_000_000:
+-+-        warning_placeholder.error("Effective sequencing output is extremely low. Check modeling settings or increase runtime.",  icon=":material/error:")
+-++        warning_placeholder.error("Effective sequencing output is extremely low.")
+-+ 
+-+     update_query_params({
+-+         "coverage_mode": coverage_mode,
+- ```
+-diff --git a/interface/main_app.py b/interface/main_app.py
+-index 174db48..a67880f 100644
+---- a/interface/main_app.py
+-+++ b/interface/main_app.py
+-@@ -38,6 +38,7 @@ def run():
+-     warning_placeholder = st.empty()
+- 
+-     # Load initial state from query or use defaults
+-+    region_input = params.get("region_input", "3.3 Gb")
+-     coverage_mode = st.segmented_control(
+-         "Coverage Mode", ["Genome-wide", "Targeted Panel"],
+-         help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
+-@@ -63,6 +64,7 @@ def run():
+-         else:
+-             num_amplicons = preset_values.amplicon_count or 1380
+-             amplicon_size = round(preset_values.region_bp / num_amplicons)
+-+            region_input = f"{num_amplicons * amplicon_size} bp"
+-     else:
+-         col_dup, col_target = st.columns(2)
+-         with col_dup:
+-@@ -81,9 +83,10 @@ def run():
+-                 with col_amp_size:
+-                     amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
+-                 region_size = num_amplicons * amplicon_size
+-+                region_input = f"{region_size} bp"
+-                 st.caption(f"Total region size: {format_region_size(region_size)}")
+-             else:
+--                region_input = st.text_input("Genome/Region Size", value=params["region_input"], disabled=variable == "Genome size")
+-+                region_input = st.text_input("Genome/Region Size", value=region_input, disabled=variable == "Genome size")
+-                 region_size = parse_region_size(region_input) if region_input else 1
+- 
+-     with col_depth:
+-@@ -198,4 +201,4 @@ def run():
+-         "read_length": read_length,
+-         "num_amplicons": num_amplicons,
+-         "amplicon_size": amplicon_size,
+--    })
+-\ No newline at end of file
+-+    })
++diff --git a/coverage_calculator/utils/query_state.py b/coverage_calculator/utils/query_state.py
++index 05d0d66..8c4df03 100644
++--- a/coverage_calculator/utils/query_state.py
+++++ b/coverage_calculator/utils/query_state.py
++@@ -41,7 +41,7 @@ def load_query_params():
++         "variable": params.get("variable", "Samples per flow cell"),
++         "preset": params.get("preset", "Custom"),
++         "region_input": params.get("region_input", "3.3 Gb"),
++-        "depth": safe_cast(params.get("depth"), float, 30),
+++        "depth": safe_cast(params.get("depth"), int, 30),
++         "samples": safe_cast(params.get("samples"), int, 1),
++         "duplication": safe_cast(params.get("duplication"), float, 2.5),
++         "on_target": safe_cast(params.get("on_target"), int, 85),
+ ```
+diff --git a/interface/main_app.py b/interface/main_app.py
+index a67880f..06cd5e3 100644
+--- a/interface/main_app.py
++++ b/interface/main_app.py
+@@ -101,7 +101,12 @@ def run():
+         with st.container(border=True):
+             samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
+ 
+-    platform = st.selectbox("Sequencing Platform", options=list(Platform), format_func=lambda p: p.value, index=0)
++    platform = st.selectbox(
++            "Sequencing Platform",
++            options=list(Platform),
++            format_func=lambda p: p.value,
++            index=[p.value for p in Platform].index(params["platform"])
++        )
+     output_bp = PLATFORM_OUTPUT[platform]
+ 
+     if platform == Platform.MINION:
 ```

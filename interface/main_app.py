@@ -101,7 +101,12 @@ def run():
         with st.container(border=True):
             samples = st.number_input("Samples", value=params["samples"], step=1, disabled=variable == "Samples per flow cell")
 
-    platform = st.selectbox("Sequencing Platform", options=list(Platform), format_func=lambda p: p.value, index=0)
+    platform = st.selectbox(
+            "Sequencing Platform",
+            options=list(Platform),
+            format_func=lambda p: p.value,
+            index=[p.value for p in Platform].index(params["platform"])
+        )
     output_bp = PLATFORM_OUTPUT[platform]
 
     if platform == Platform.MINION:
