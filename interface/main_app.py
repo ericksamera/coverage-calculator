@@ -38,6 +38,7 @@ def run():
     warning_placeholder = st.empty()
 
     # Load initial state from query or use defaults
+    region_input = params.get("region_input", "3.3 Gb")
     coverage_mode = st.segmented_control(
         "Coverage Mode", ["Genome-wide", "Targeted Panel"],
         help="Choose 'Genome-wide' for whole-genome or exome sequencing. Use 'Targeted Panel' for targeted-amplicon.",
@@ -63,6 +64,7 @@ def run():
         else:
             num_amplicons = preset_values.amplicon_count or 1380
             amplicon_size = round(preset_values.region_bp / num_amplicons)
+            region_input = f"{num_amplicons * amplicon_size} bp"
     else:
         col_dup, col_target = st.columns(2)
         with col_dup:
@@ -81,9 +83,10 @@ def run():
                 with col_amp_size:
                     amplicon_size = st.number_input("Avg Amplicon Size (bp)", min_value=50, value=params["amplicon_size"], step=25)
                 region_size = num_amplicons * amplicon_size
+                region_input = f"{region_size} bp"
                 st.caption(f"Total region size: {format_region_size(region_size)}")
             else:
-                region_input = st.text_input("Genome/Region Size", value=params["region_input"], disabled=variable == "Genome size")
+                region_input = st.text_input("Genome/Region Size", value=region_input, disabled=variable == "Genome size")
                 region_size = parse_region_size(region_input) if region_input else 1
 
     with col_depth:
