@@ -10,7 +10,7 @@ APP_COMMENT = "Streamlined sequencing coverage calculator"
 
 # Define pages using st.Page
 pages = [
-    st.Page(run_calculator_ui, title="Calculator", icon="", default=True),
+    st.Page(run_calculator_ui, title="Calculator",, default=True),
     # Add more pages here as needed
 ]
 
