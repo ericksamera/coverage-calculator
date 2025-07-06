@@ -132,7 +132,7 @@ def run():
         label = "Samples per Flow Cell"
         value = f"{result:.1f}"
         delta = (
-            f"at {depth:.1f}X per amplicon (across {num_amplicons} amplicons) using {platform['name']}."
+            f"at {depth:.1f}X coverage per amplicon (based on {num_amplicons} amplicons averaging {amplicon_size} bp each) using the {platform['name']} platform."
             if coverage_mode == "Targeted Panel"
             else f"at {depth:.1f}X genome-wide"
         )
