@@ -3,10 +3,10 @@
 import streamlit as st
 from interface.main_app import run as run_calculator_ui
 
-APP_NAME = "Coverage Calculator"
+APP_NAME = "Sequencing Calculator"
 APP_VERSION = "1.0.0"
 APP_AUTHOR = "Erick Samera"
-APP_COMMENT = "Sequencing coverage calculator"
+APP_COMMENT = "For calculating samples per flowcell, necessary depth, or supported genome size"
 
 pages = [
     st.Page(run_calculator_ui, title="Calculator", default=True),
