@@ -14,7 +14,7 @@ pages = [
 
 selected_page = st.navigation(pages)
 
-st.set_page_config(page_title=f"ES | {APP_NAME}", page_icon=":material/calculate:", layout="wide")
+st.set_page_config(page_title=f"ES | {APP_NAME}", page_icon=":material/calculate:", layout="wide", initial_sidebar_state="collapsed" if st.query_params["embed"] == "true" else "auto" )
 
 with st.sidebar:
     st.title(f"{APP_NAME}")
