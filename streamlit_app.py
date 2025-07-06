@@ -14,7 +14,7 @@ pages = [
 
 selected_page = st.navigation(pages)
 
-st.set_page_config(page_title=APP_NAME, page_icon="", layout="wide")
+st.set_page_config(page_title=f"ES | {APP_NAME}", page_icon=":material/calculate:", layout="wide")
 
 with st.sidebar:
     st.title(f"{APP_NAME}")
