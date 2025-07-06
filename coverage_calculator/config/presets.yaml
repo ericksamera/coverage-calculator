@@ -1,0 +1,33 @@
+genome_wide:
+  - id: wgs_human
+    label: "WGS (Human)"
+    region_bp: 3300000000
+    duplication_pct: 2.5
+    on_target_pct: 100
+
+  - id: exome_human
+    label: "Exome (Human)"
+    region_bp: 50000000
+    duplication_pct: 15.0
+    on_target_pct: 80
+
+  - id: bacterial_wgs
+    label: "Bacterial WGS"
+    region_bp: 5000000
+    duplication_pct: 2.0
+    on_target_pct: 100
+
+targeted:
+  - id: amplicon_panel
+    label: "Amplicon Panel (AmpliSeq)"
+    region_bp: 400000
+    duplication_pct: 10.0
+    on_target_pct: 90
+    amplicon_count: 1380
+
+  - id: metagenomics
+    label: "Metagenomics"
+    region_bp: 500
+    duplication_pct: 1.0
+    on_target_pct: 100
+    amplicon_count: 1

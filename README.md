@@ -1,27 +1,15 @@
-# Sequencing Coverage Calculator
+# Coverage Calculator
 
-A Streamlit-based app to estimate sequencing coverage metrics such as:
-
-- Samples per flow cell  
-- Depth per sample  
-- Supported region size  
-
-Supports both **genome-wide** and **targeted panel** sequencing.
+A Streamlit-based calculator for planning sequencing experiments.
+Easily estimate samples per flowcell, coverage depth, or region size for any platform and protocol.
 
 ## Features
+- Genome-wide or targeted panel calculations
+- Preset protocols (WGS, exome, panels) and sequencing platforms (MiSeq, MinION, etc.)
+- Handles sample number, depth, genome/target size, duplication, and more
+- Advanced options for bias, fragment overlap, library complexity, and read filtering
+- No spreadsheet needed—results and warnings update instantly
 
-- Platform presets for MiSeq, MinION, NovaSeq, etc.
-- Protocol presets (e.g. AmpliSeq-style panels)
-- Modeling options:  
-  - Lander-Waterman library complexity  
-  - GC bias  
-  - Fragment/read overlap
-- Base64-encoded config sharing (via URL or paste)
-- Live warnings and result formatting
-- Exportable config string for reproducibility
-
-
-## Example Use Cases
-- AmpliSeq panel planning
-- WGS depth estimation
-- Flow cell sample budgeting
+## Customizing
+- Edit protocols/panels: coverage_calculator/config/presets.yaml
+- Edit platforms: coverage_calculator/config/platforms.yaml

@@ -18,7 +18,6 @@ def decode_config(encoded: str) -> dict:
     try:
         if not encoded or encoded in ["null", "None"]:
             return {}
-        # Fix padding if needed
         missing_padding = len(encoded) % 4
         if missing_padding:
             encoded += "=" * (4 - missing_padding)
