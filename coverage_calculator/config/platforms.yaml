@@ -39,6 +39,39 @@ platforms:
     name:   "MiSeq i100 100M (1x100)"
     output: "10 Gb"
 
+
+  - id:     MISEQ_V2_NANO_500
+    name:   "MiSeq v2 Nano (2x250)"
+    output: "500 Mb"
+
+  - id:     MISEQ_V2_NANO_300
+    name:   "MiSeq v2 Nano (2x150)"
+    output: "300 Mb"
+
+  - id:     MISEQ_V2_MICRO_300
+    name:   "MiSeq v2 Micro (2x150)"
+    output: "1.2 Gb"
+
+  - id:     MISEQ_V2_50
+    name:   "MiSeq v2 (2x25)"
+    output: "750 Mb"
+
+  - id:     MISEQ_V2_300
+    name:   "MiSeq v2 (2x150)"
+    output: "4.5 Gb"
+
+  - id:     MISEQ_V2_500
+    name:   "MiSeq v2 (2x250)"
+    output: "7.5 Gb"
+
+  - id:     MISEQ_V3_150
+    name:   "MiSeq v3 (2x75)"
+    output: "3.8 Gb"
+
+  - id:     MISEQ_V3_600
+    name:   "MiSeq v3 (2x300)"
+    output: "15 Gb"
+
   # MinION yield is time‑dependent, so keep a base line plus the rate
   - id: MINION
     name: "MinION FLO-MIN114"
