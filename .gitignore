@@ -173,4 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-*codebase.py.txt*
+*codebase*
