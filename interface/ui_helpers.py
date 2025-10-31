@@ -1,10 +1,14 @@
 # interface/ui_helpers.py
 
 import math
-from typing import Optional
+from typing import Optional, Tuple
 
 import streamlit as st
-from coverage_calculator.utils.unit_parser import parse_region_size, format_region_size
+
+from coverage_calculator.utils.unit_parser import (
+    format_region_size,
+    parse_region_size,
+)
 
 
 def show_results_ui(
@@ -17,7 +21,7 @@ def show_results_ui(
     delta: str,
     total_bp: float,
     num_amplicons: Optional[int] = None,
-):
+) -> None:
     """
     Shows the results metric and any relevant warnings.
     """
@@ -28,7 +32,6 @@ def show_results_ui(
         warning_placeholder.warning("Sequencing output is too low for even one sample.")
     if total_bp < 1_000_000:
         warning_placeholder.error("Effective sequencing output is extremely low.")
-    # Example: add more warnings for unrealistic amplicon values
     if (
         variable == "Samples per flow cell"
         and num_amplicons is not None
@@ -39,17 +42,15 @@ def show_results_ui(
         )
 
 
-def dedup_on_target_ui(preset_values, params):
+def dedup_on_target_ui(preset_values, params) -> Tuple[float, float]:
     """
     Shows duplication and on-target number inputs if Custom, else fills from preset.
     Returns: duplication, on_target
     """
     if preset_values is not None:
-        # For presets, just return the preset's values (no columns needed)
         duplication = preset_values.duplication_pct
         on_target = preset_values.on_target_pct
     else:
-        # For custom, show editable fields (columns)
         col_dup, col_target = st.columns(2)
         with col_dup:
             duplication = st.number_input(
@@ -58,7 +59,10 @@ def dedup_on_target_ui(preset_values, params):
                 max_value=50.0,
                 value=params["duplication"],
                 step=0.5,
-                help="Estimated percent of duplicate reads (remove PCR/sequencing duplicates).",
+                help=(
+                    "Estimated percent of duplicate reads "
+                    "(remove PCR/sequencing duplicates)."
+                ),
             )
         with col_target:
             on_target = st.number_input(
@@ -67,9 +71,7 @@ def dedup_on_target_ui(preset_values, params):
                 max_value=100,
                 value=params["on_target"],
                 step=1,
-                help=(
-                    "Fraction of sequenced reads mapping to the intended region/target."
-                ),
+                help="Fraction of sequenced reads mapping to the intended region/target.",
             )
     return duplication, on_target
 
@@ -115,7 +117,7 @@ def advanced_options_ui(coverage_mode: str, params):
             step=0.5,
             help=(
                 "Percent of reads lost to instrument filtering (fail QC/basecalling). "
-                "Typical: 3-7%."
+                "Typical: 3–7%."
             ),
         )
 
@@ -203,7 +205,6 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
     platform_ids = list(PLATFORM_CONFIG.keys())
     platform_names = [PLATFORM_CONFIG[pid]["name"] for pid in platform_ids]
 
-    # Use platform from params if it matches; else fallback to first
     default_platform_id = None
     if params["platform"] in platform_ids:
         default_platform_id = params["platform"]
@@ -224,11 +225,10 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
     platform_id = platform_ids[platform_names.index(selected_name)]
     platform = PLATFORM_CONFIG[platform_id]
 
-    # Base output from config
     base_output_bp = platform["output_bp"]
     output_bp = base_output_bp
 
-    # MinION special case: runtime-dependent yield
+    # MinION: runtime-dependent yield
     if "MINION" in platform_id:
         runtime_hr = st.slider(
             "MinION Runtime (hrs)",
@@ -245,13 +245,12 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
     else:
         runtime_hr = params.get("runtime_hr", 48)
 
-    # IMPORTANT: Do not overwrite output_bp with base value; preserve runtime override
     return platform_id, platform, output_bp, runtime_hr
 
 
 def region_size_input_ui(
     coverage_mode: str, variable: str, preset_values, params, region_input: str
-):
+) -> Tuple[int, str, int, int]:
     """
     Handles region/amplicon input widgets.
     Returns: region_size, region_input, num_amplicons, amplicon_size
@@ -297,9 +296,7 @@ def region_size_input_ui(
                 "Genome/Region Size",
                 value=region_input,
                 disabled=variable == "Genome size",
-                help=(
-                    "Total size of region to cover (e.g. '3.3 Gb', '50 Mb', '1200000')."
-                ),
+                help="Total size of region to cover (e.g. '3.3 Gb', '50 Mb', '1200000').",
             )
             try:
                 region_size = parse_region_size(region_input) if region_input else 1
@@ -312,8 +309,86 @@ def region_size_input_ui(
     return region_size, region_input, num_amplicons, amplicon_size
 
 
+# ----------------------------
+# ddRAD configuration controls
+# ----------------------------
+def ddrad_config_ui(
+    *, preset_values, params, show_panel: bool
+) -> Tuple[bool, str, float, str]:
+    """
+    When ddRAD is selected and the user is solving 'Genome size',
+    show options to either:
+      1) solve whole-genome size from a target fraction; or
+      2) solve target fraction from a known whole-genome size.
+
+    Returns:
+      (enabled, mode, target_fraction_pct, known_genome_input)
+    """
+    if not show_panel:
+        # Nothing to display; return existing state
+        return (
+            False,
+            params.get("ddrad_mode", "fraction_to_genome"),
+            float(params.get("target_fraction_pct", 2.0)),
+            params.get("known_genome_input", "3.3 Gb"),
+        )
+
+    # ddRAD is considered enabled if the preset advertises a target_fraction_pct
+    enabled = bool(
+        preset_values is not None
+        and getattr(preset_values, "target_fraction_pct", None) is not None
+    )
+    default_fraction = (
+        float(preset_values.target_fraction_pct)
+        if enabled and preset_values.target_fraction_pct is not None
+        else float(params.get("target_fraction_pct", 2.0))
+    )
+
+    with st.container(border=True):
+        st.subheader("Reduced representation (ddRAD) options", anchor=False)
+        mode_label = st.radio(
+            "Configure ddRAD by",
+            (
+                "Solve whole genome from %",
+                "Solve % from known genome",
+            ),
+            index=(
+                0
+                if params.get("ddrad_mode", "fraction_to_genome")
+                == "fraction_to_genome"
+                else 1
+            ),
+            help=(
+                "Pick whether to provide the targeted % and solve the whole genome size, "
+                "or provide a known whole genome size and solve the targeted %."
+            ),
+        )
+        if mode_label == "Solve whole genome from %":
+            ddrad_mode = "fraction_to_genome"
+            target_fraction_pct = st.slider(
+                "Target fraction of genome (%)",
+                min_value=0.01,
+                max_value=100.0,
+                value=float(params.get("target_fraction_pct", default_fraction)),
+                step=0.01,
+            )
+            known_genome_input = params.get("known_genome_input", "3.3 Gb")
+        else:
+            ddrad_mode = "genome_to_fraction"
+            known_genome_input = st.text_input(
+                "Known whole-genome size",
+                value=params.get("known_genome_input", "3.3 Gb"),
+                help="Example: '3.3 Gb' (human) or '5 Mb' (bacteria).",
+            )
+            target_fraction_pct = float(
+                params.get("target_fraction_pct", default_fraction)
+            )
+
+    return True, ddrad_mode, float(target_fraction_pct), known_genome_input
+
+
 # -------------------
-# NEW: Math explainer
+# Math explainer
 # -------------------
 def render_math_explainer(
     *,
@@ -334,6 +409,11 @@ def render_math_explainer(
     applied_gc_bias: bool,
     gc_bias_percent: float,
     result_value: float,
+    # ddRAD context
+    ddrad_enabled: bool = False,
+    ddrad_mode: str = "fraction_to_genome",
+    target_fraction_pct: float = 2.0,
+    known_genome_bp: Optional[int] = None,
 ) -> None:
     """Show a step-by-step explanation of how the result was computed."""
 
@@ -381,7 +461,7 @@ def render_math_explainer(
         st.markdown("### Effective output (bp)")
         st.markdown(
             f"""
-1. **Platform output** *(O₀)*: {fmt_bp(O0)} — **{platform_name}**
+1. **Platform output** *(O₀)*: {fmt_bp(O0)} — **{platform_name}**  
 2. **Instrument filtering** *(O₁)*: O₀ × (1 − *q*/100)  
    • q = {fmt_pct(read_filter_loss)} → **{fmt_bp(O1)}**
 """
@@ -403,9 +483,18 @@ def render_math_explainer(
         else:
             st.markdown(f"3. **Fragment/read overlap**: Not applied → **{fmt_bp(O2)}**")
 
-        # Use st.latex for math to ensure proper rendering
-        st.markdown("4. **Library complexity (Lander–Waterman)** *(O₃)*:")
-        st.latex(r"O_3 = G \cdot \left(1 - e^{-\frac{O_2}{G}}\right)")
+        if applied_complexity:
+            st.markdown(
+                r"""
+4. **Library complexity (Lander–Waterman)** *(O₃)*:
+   \( O_3 = G \cdot \left(1 - e^{-\frac{O_2}{G}}\right) \)
+"""
+            )
+            st.markdown(
+                f"   • G = {fmt_bp(region_size_bp)}; O₂ = {fmt_bp(O2)} → **{fmt_bp(O3)}**"
+            )
+        else:
+            st.markdown(f"4. **Library complexity**: Not applied → **{fmt_bp(O3)}**")
 
         if applied_gc_bias:
             st.markdown(
@@ -422,8 +511,28 @@ def render_math_explainer(
             "for readability."
         )
 
+        # Compact symbol legend in LaTeX
+        st.markdown("### Symbols")
+        st.latex(
+            r"""
+\begin{aligned}
+G &:= \text{region size (bp)} &
+D &:= \text{depth (X)} \\
+S &:= \text{number of samples} &
+O_{\text{ext}} &:= \text{effective output after filters (bp)} \\
+\text{eff} &:= \left(1 - \frac{\text{dup}}{100}\right)\!\times\!\frac{\text{on\_target}}{100} &
+q &:= \text{instrument filtering loss (\%)} \\
+L &:= \text{read length (bp)} &
+F &:= \text{fragment size (bp)} \\
+r &:= \frac{2L - F}{2L}\ (\text{if }2L>F) &
+b &:= \text{bias loss (\%)} \\
+G_{\text{target}} &:= \text{coverage-sustained target size (bp)} &
+f &:= \text{target fraction of genome (\%)}
+\end{aligned}
+"""
+        )
+
         st.markdown("### Effective yield from duplicates & on‑target")
-        # Render equations with st.latex (avoid inline \( ... \) in markdown)
         st.latex(
             r"\text{eff} = \left(1 - \frac{\text{dup}}{100}\right) \times \frac{\text{on\_target}}{100}"
         )
@@ -434,10 +543,9 @@ def render_math_explainer(
 
         st.markdown("### Final formula and result")
         if variable == "Samples per flow cell":
-            # S = O_eff / (G * D / eff)
+            # S = O_ext / (G * D / eff)
             required_per_sample = (region_size_bp * depth) / eff if eff > 0 else 0.0
             st.latex(r"S = \dfrac{O_{\text{ext}}}{\frac{G \cdot D}{\text{eff}}}")
-            # Show the per-sample requirement explicitly
             st.markdown(
                 f"Per‑sample requirement = {fmt_bp(region_size_bp)} × {depth:.1f} / "
                 f"{eff:.4f} = **{fmt_bp(required_per_sample)}**"
@@ -453,12 +561,11 @@ def render_math_explainer(
             )
 
         elif variable == "Depth":
-            # D = (O_eff / S) * eff / G
+            # D = (O_ext / S) * eff / G
             per_sample_out = total_bp_after / samples if samples > 0 else 0.0
             st.latex(
                 r"D = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{G}"
             )
-            # Show the per-sample output explicitly
             st.markdown(
                 f"Per‑sample output = {fmt_bp(total_bp_after)} / {samples} = "
                 f"**{fmt_bp(per_sample_out)}**"
@@ -468,15 +575,24 @@ def render_math_explainer(
                 f"{fmt_bp(region_size_bp)} = **{result_value:.1f}X**"
             )
 
-        else:  # "Genome size"
-            # G = ((O_eff / S) * eff) / D
+        else:  # "Genome size" mode
+            # First: target region that can be covered at depth D across S samples
             st.latex(
-                r"G = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{D}"
+                r"G_{\text{target}} = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{D}"
             )
-            st.markdown(
-                f"G = (({fmt_bp(total_bp_after)} / {samples}) × {eff:.4f}) / "
-                f"{depth:.1f} = **{format_region_size(int(result_value))}**"
-            )
+            if ddrad_enabled:
+                if ddrad_mode == "fraction_to_genome":
+                    # G_total = G_target / (f/100)
+                    st.latex(r"G = \dfrac{G_{\text{target}}}{(f/100)}")
+                else:
+                    # f = (G_target / G_total) × 100
+                    st.latex(r"f = \left(\dfrac{G_{\text{target}}}{G}\right)\times 100")
+                    if known_genome_bp and known_genome_bp > 0:
+                        st.markdown(
+                            f"With G = {format_region_size(known_genome_bp)}, "
+                            f"f = (G_target / G) × 100."
+                        )
+            # (If not ddRAD, the main metric above already shows the supported region.)
 
         st.markdown("### Notes")
         st.markdown(

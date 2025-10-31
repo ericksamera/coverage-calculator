@@ -1,27 +1,33 @@
 import streamlit as st
 
-from coverage_calculator.utils.unit_parser import format_region_size
+from coverage_calculator.calculator.coverage_model import CoverageCalculator
+from coverage_calculator.calculator.modeling import (
+    adjust_for_fragment_overlap,
+    adjust_for_gc_bias,
+    lander_waterman_effective_coverage,
+)
+from coverage_calculator.config.platforms import PLATFORM_CONFIG
+from coverage_calculator.config.presets import (
+    GENOME_WIDE_PRESETS,
+    TARGETED_PRESETS,
+)
 from coverage_calculator.utils.query_state import (
     load_query_params,
     update_query_params,
 )
-from coverage_calculator.calculator.coverage_model import CoverageCalculator
-from coverage_calculator.config.platforms import PLATFORM_CONFIG
-from coverage_calculator.config.presets import GENOME_WIDE_PRESETS, TARGETED_PRESETS
-from coverage_calculator.calculator.modeling import (
-    lander_waterman_effective_coverage,
-    adjust_for_gc_bias,
-    adjust_for_fragment_overlap,
+from coverage_calculator.utils.unit_parser import (
+    format_region_size,
+    parse_region_size,
 )
-
 from interface.ui_helpers import (
-    show_results_ui,
+    advanced_options_ui,
+    ddrad_config_ui,
     dedup_on_target_ui,
-    region_size_input_ui,
     platform_selector_ui,
     preset_select_ui,
-    advanced_options_ui,
+    region_size_input_ui,
     render_math_explainer,
+    show_results_ui,
 )
 
 
@@ -62,7 +68,7 @@ def run():
     # --- Preset selection based on mode ---
     col_preset, col_settings = st.columns(2)
     with col_preset:
-        preset_label, preset_values, active_presets = preset_select_ui(
+        preset_label, preset_values, _active_presets = preset_select_ui(
             coverage_mode, params, GENOME_WIDE_PRESETS, TARGETED_PRESETS
         )
 
@@ -70,7 +76,9 @@ def run():
         duplication = preset_values.duplication_pct
         on_target = preset_values.on_target_pct
         if coverage_mode == "Genome-wide":
-            region_input = format_region_size(preset_values.region_bp)
+            # For ddRAD we keep the free-form inputs (fraction panel handles it)
+            if getattr(preset_values, "target_fraction_pct", None) is None:
+                region_input = format_region_size(preset_values.region_bp)
         else:
             num_amplicons = preset_values.amplicon_count or 1
             amplicon_size = round(preset_values.region_bp / num_amplicons)
@@ -83,6 +91,20 @@ def run():
     with col_size:
         region_size, region_input, num_amplicons, amplicon_size = region_size_input_ui(
             coverage_mode, variable, preset_values, params, region_input
+        )
+
+        # ddRAD panel appears only in Genome-wide + Genome size + ddRAD preset
+        ddrad_enabled, ddrad_mode, target_fraction_pct, known_genome_input = (
+            ddrad_config_ui(
+                preset_values=preset_values,
+                params=params,
+                show_panel=(
+                    coverage_mode == "Genome-wide"
+                    and variable == "Genome size"
+                    and preset_values is not None
+                    and getattr(preset_values, "target_fraction_pct", None) is not None
+                ),
+            )
         )
 
     with col_depth:
@@ -139,8 +161,10 @@ def run():
         total_bp = adjust_for_fragment_overlap(total_bp, rsafe, fsafe)
 
     # Library complexity (Lander–Waterman)
+    # Avoid zero-sized region feeding the model; use a minimal positive region.
+    safe_region_for_model = max(1, int(region_size))
     if apply_complexity:
-        total_bp = lander_waterman_effective_coverage(region_size, total_bp)
+        total_bp = lander_waterman_effective_coverage(safe_region_for_model, total_bp)
 
     # GC / sequence bias
     if apply_gc_bias:
@@ -148,14 +172,15 @@ def run():
 
     # Calculator with effective-yield terms wired in
     calc = CoverageCalculator(
-        region_size_bp=region_size,
+        region_size_bp=safe_region_for_model,  # guard against 0 → avoids ValueError
         depth=depth,
         samples=samples,
         output_bp=total_bp,
-        duplication_pct=duplication,  # <— now honored
-        on_target_pct=on_target,  # <— now honored
+        duplication_pct=duplication,
+        on_target_pct=on_target,
     )
 
+    # Prepare result
     if variable == "Samples per flow cell":
         result = calc.calc_samples_per_flow_cell()
         label = "Samples per Flow Cell"
@@ -178,17 +203,42 @@ def run():
             else f"Genome-wide across {samples} samples using {platform['name']}"
         )
 
-    elif variable == "Genome size":
-        result = calc.calc_genome_size()
-        label = "Supported Region Size"
-        value = format_region_size(int(result))
-        delta = f"at {depth:.1f}X depth for {samples} samples"
-
-    else:
-        result = 0
-        label = "Result"
-        value = "N/A"
-        delta = ""
+    else:  # "Genome size"
+        target_region_bp = calc.calc_genome_size()  # G_target at depth D across S
+        if ddrad_enabled:
+            if ddrad_mode == "fraction_to_genome":
+                f = max(0.0001, float(target_fraction_pct) / 100.0)
+                result = target_region_bp / f
+                label = "Supported Whole-Genome Size (ddRAD)"
+                value = format_region_size(int(result))
+                delta = (
+                    f"from target fraction {target_fraction_pct:.2f}% at {depth:.1f}X "
+                    f"across {samples} samples"
+                )
+            else:
+                # Solve % from known genome size
+                try:
+                    known_genome_bp = parse_region_size(known_genome_input)
+                except Exception:
+                    known_genome_bp = 0
+                frac_pct = (
+                    (target_region_bp / known_genome_bp) * 100.0
+                    if known_genome_bp > 0
+                    else 0.0
+                )
+                result = max(0.0, min(100.0, frac_pct))
+                label = "Target fraction of genome (ddRAD)"
+                value = f"{result:.2f}%"
+                delta = (
+                    f"given known genome {format_region_size(known_genome_bp)} at "
+                    f"{depth:.1f}X across {samples} samples"
+                )
+        else:
+            # Not ddRAD: report the region size directly
+            result = target_region_bp
+            label = "Supported Region Size"
+            value = format_region_size(int(result))
+            delta = f"at {depth:.1f}X depth for {samples} samples"
 
     show_results_ui(
         result_placeholder,
@@ -202,10 +252,17 @@ def run():
         num_amplicons=num_amplicons,
     )
 
-    # --- NEW: “How the math works” explainer at the bottom ---
+    # “How the math works” explainer
+    known_genome_bp_val = None
+    if ddrad_enabled and ddrad_mode == "genome_to_fraction":
+        try:
+            known_genome_bp_val = parse_region_size(known_genome_input)
+        except Exception:
+            known_genome_bp_val = None
+
     render_math_explainer(
         variable=variable,
-        region_size_bp=region_size,
+        region_size_bp=safe_region_for_model,
         depth=float(depth),
         samples=int(samples),
         platform_name=platform["name"],
@@ -220,7 +277,11 @@ def run():
         applied_complexity=apply_complexity,
         applied_gc_bias=apply_gc_bias,
         gc_bias_percent=float(gc_bias_percent),
-        result_value=float(result),
+        result_value=float(result) if isinstance(result, (int, float)) else 0.0,
+        ddrad_enabled=ddrad_enabled,
+        ddrad_mode=ddrad_mode,
+        target_fraction_pct=float(target_fraction_pct),
+        known_genome_bp=known_genome_bp_val,
     )
 
     # Persist state to the URL
@@ -245,5 +306,9 @@ def run():
             "read_length": read_length,
             "num_amplicons": num_amplicons,
             "amplicon_size": amplicon_size,
+            # ddRAD state
+            "target_fraction_pct": target_fraction_pct,
+            "ddrad_mode": ddrad_mode,
+            "known_genome_input": known_genome_input,
         }
     )

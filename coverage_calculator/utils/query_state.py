@@ -1,8 +1,9 @@
 # coverage_calculator/utils/query_state.py
 
-import streamlit as st
-import json
 import base64
+import json
+
+import streamlit as st
 
 
 def safe_cast(val, to_type, default):
@@ -60,6 +61,10 @@ def load_query_params():
         "read_length": safe_cast(params.get("read_length"), int, 150),
         "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
         "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
+        # ddRAD
+        "target_fraction_pct": safe_cast(params.get("target_fraction_pct"), float, 2.0),
+        "ddrad_mode": params.get("ddrad_mode", "fraction_to_genome"),
+        "known_genome_input": params.get("known_genome_input", "3.3 Gb"),
     }
 
 
