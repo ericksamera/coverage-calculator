@@ -403,18 +403,9 @@ def render_math_explainer(
         else:
             st.markdown(f"3. **Fragment/read overlap**: Not applied → **{fmt_bp(O2)}**")
 
-        if applied_complexity:
-            st.markdown(
-                r"""
-4. **Library complexity (Lander–Waterman)** *(O₃)*:
-   \( O_3 = G \cdot \left(1 - e^{-\frac{O_2}{G}}\right) \)
-""",
-            )
-            st.markdown(
-                f"   • G = {fmt_bp(region_size_bp)}; O₂ = {fmt_bp(O2)} → **{fmt_bp(O3)}**"
-            )
-        else:
-            st.markdown(f"4. **Library complexity**: Not applied → **{fmt_bp(O3)}**")
+        # Use st.latex for math to ensure proper rendering
+        st.markdown("4. **Library complexity (Lander–Waterman)** *(O₃)*:")
+        st.latex(r"O_3 = G \cdot \left(1 - e^{-\frac{O_2}{G}}\right)")
 
         if applied_gc_bias:
             st.markdown(
@@ -432,12 +423,13 @@ def render_math_explainer(
         )
 
         st.markdown("### Effective yield from duplicates & on‑target")
-        st.markdown(
-            rf"""
-\( \text{{eff}} = (1 - \frac{{\text{{dup}}}}{{100}}) \times \frac{{\text{{on\_target}}}}{{100}} \)
-= \( (1 - \frac{{{duplication_pct:.2f}}}{{100}}) \times \frac{{{on_target_pct:.2f}}}{{100}} \)
-= **{eff:.4f}**
-"""
+        # Render equations with st.latex (avoid inline \( ... \) in markdown)
+        st.latex(
+            r"\text{eff} = \left(1 - \frac{\text{dup}}{100}\right) \times \frac{\text{on\_target}}{100}"
+        )
+        st.latex(
+            rf"\text{{eff}} = \left(1 - \frac{{{duplication_pct:.2f}}}{{100}}\right) "
+            rf"\times \frac{{{on_target_pct:.2f}}}{{100}} = {eff:.4f}"
         )
 
         st.markdown("### Final formula and result")
@@ -445,7 +437,7 @@ def render_math_explainer(
             # S = O_eff / (G * D / eff)
             required_per_sample = (region_size_bp * depth) / eff if eff > 0 else 0.0
             st.latex(r"S = \dfrac{O_{\text{ext}}}{\frac{G \cdot D}{\text{eff}}}")
-            # Show the per-sample requirement explicitly (uses required_per_sample)
+            # Show the per-sample requirement explicitly
             st.markdown(
                 f"Per‑sample requirement = {fmt_bp(region_size_bp)} × {depth:.1f} / "
                 f"{eff:.4f} = **{fmt_bp(required_per_sample)}**"
@@ -466,7 +458,7 @@ def render_math_explainer(
             st.latex(
                 r"D = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{G}"
             )
-            # Show the per-sample output explicitly (uses per_sample_out)
+            # Show the per-sample output explicitly
             st.markdown(
                 f"Per‑sample output = {fmt_bp(total_bp_after)} / {samples} = "
                 f"**{fmt_bp(per_sample_out)}**"
