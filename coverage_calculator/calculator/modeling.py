@@ -2,7 +2,10 @@
 
 import math
 
-def lander_waterman_effective_coverage(genome_size_bp: int, total_bases: float) -> float:
+
+def lander_waterman_effective_coverage(
+    genome_size_bp: int, total_bases: float
+) -> float:
     """
     Estimate the effective coverage using the Lander-Waterman model.
     Returns the number of unique bases expected to be covered.
@@ -20,7 +23,9 @@ def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> 
     return effective_bp * (1 - gc_dropout_factor)
 
 
-def adjust_for_fragment_overlap(total_bases: float, read_length: int, fragment_size: int) -> float:
+def adjust_for_fragment_overlap(
+    total_bases: float, read_length: int, fragment_size: int
+) -> float:
     """
     Estimate the true usable base pairs based on fragment overlap.
     If reads overlap heavily (PE reads longer than fragments), subtract redundancy.

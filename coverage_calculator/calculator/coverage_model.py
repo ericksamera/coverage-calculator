@@ -1,16 +1,17 @@
 # coverage_calculator/calculator/coverage_model.py
 
+
 class CoverageCalculator:
     def __init__(
-            self,
-            *,
-            region_size_bp: int,
-            depth: float,
-            samples: int,
-            output_bp: float,
-            duplication_pct: float,
-            on_target_pct: float
-        ):
+        self,
+        *,
+        region_size_bp: int,
+        depth: float,
+        samples: int,
+        output_bp: float,
+        duplication_pct: float,
+        on_target_pct: float,
+    ):
         if region_size_bp <= 0:
             raise ValueError("region_size_bp must be > 0")
         if depth <= 0:
@@ -75,6 +76,8 @@ class CoverageCalculator:
         return usable_per_sample / self.depth
 
     def __repr__(self) -> str:
-        return (f"CoverageCalculator(region_size_bp={self.region_size_bp}, depth={self.depth}, "
-                f"samples={self.samples}, output_bp={self.output_bp}, "
-                f"duplication_pct={self.duplication_pct}, on_target_pct={self.on_target_pct})")
+        return (
+            f"CoverageCalculator(region_size_bp={self.region_size_bp}, depth={self.depth}, "
+            f"samples={self.samples}, output_bp={self.output_bp}, "
+            f"duplication_pct={self.duplication_pct}, on_target_pct={self.on_target_pct})"
+        )

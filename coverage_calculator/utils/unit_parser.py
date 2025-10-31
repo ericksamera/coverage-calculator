@@ -1,5 +1,6 @@
 # utils/unit_parser.py
 
+
 def parse_region_size(input_str: str) -> int:
     """
     Parse strings like '3.3Gb', '500 Kbp', '1.2M', '1000000', '1e6', '1.5e9' into integer bp.
@@ -18,18 +19,18 @@ def parse_region_size(input_str: str) -> int:
     input_str = input_str.strip().replace(" ", "").lower()
     suffix_map = {
         "gb": 1_000_000_000,
-        "g":  1_000_000_000,
+        "g": 1_000_000_000,
         "mb": 1_000_000,
-        "m":  1_000_000,
+        "m": 1_000_000,
         "kb": 1_000,
-        "k":  1_000,
+        "k": 1_000,
         "bp": 1,
-        "b":  1
+        "b": 1,
     }
 
     for suffix, factor in suffix_map.items():
         if input_str.endswith(suffix):
-            num_str = input_str[:-len(suffix)]
+            num_str = input_str[: -len(suffix)]
             break
     else:
         num_str = input_str

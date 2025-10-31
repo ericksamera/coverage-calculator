@@ -4,15 +4,18 @@ import streamlit as st
 import json
 import base64
 
+
 def safe_cast(val, to_type, default):
     try:
         return to_type(val)
     except (ValueError, TypeError):
         return default
 
+
 def encode_config(params: dict) -> str:
     json_str = json.dumps(params)
     return base64.urlsafe_b64encode(json_str.encode()).decode()
+
 
 def decode_config(encoded: str) -> dict:
     try:
@@ -27,6 +30,7 @@ def decode_config(encoded: str) -> dict:
         st.warning("⚠️ Could not parse the configuration string.")
         print(f"[decode_config error] {e}")
         return {}
+
 
 def load_query_params():
     q = st.query_params
@@ -57,6 +61,7 @@ def load_query_params():
         "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
         "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
     }
+
 
 def update_query_params(params: dict):
     encoded = encode_config(params)
