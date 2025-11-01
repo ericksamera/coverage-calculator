@@ -1,10 +1,13 @@
+# interface/main_app.py
+
+from __future__ import annotations
+
 import streamlit as st
 
 from coverage_calculator.calculator.coverage_model import CoverageCalculator
-from coverage_calculator.calculator.modeling import (
-    adjust_for_fragment_overlap,
-    adjust_for_gc_bias,
-    lander_waterman_effective_coverage,
+from coverage_calculator.calculator.effective_output import (
+    compute_effective_output,
+    EffectiveOutputStages,
 )
 from coverage_calculator.config.platforms import PLATFORM_CONFIG
 from coverage_calculator.config.presets import (
@@ -26,12 +29,12 @@ from interface.ui_helpers import (
     platform_selector_ui,
     preset_select_ui,
     region_size_input_ui,
-    render_math_explainer,
     show_results_ui,
 )
+from interface.math_explainer import render_math_explainer
 
 
-def run():
+def run() -> None:
     params = load_query_params()
     st.title("Sequencing Coverage Calculator")
 
@@ -66,7 +69,7 @@ def run():
         )
 
     # --- Preset selection based on mode ---
-    col_preset, col_settings = st.columns(2)
+    col_preset, _col_settings = st.columns(2)
     with col_preset:
         preset_label, preset_values, _active_presets = preset_select_ui(
             coverage_mode, params, GENOME_WIDE_PRESETS, TARGETED_PRESETS
@@ -118,7 +121,7 @@ def run():
             if coverage_mode == "Targeted Panel" and depth < 100:
                 st.info(
                     "For amplicon-based panels (AmpliSeq), sequencing depths of 500–1000X "
-                    "are typical. For Metagenomics, aim for greater than 10000X."
+                    "are typical. For Metagenomics, aim for >10,000X."
                 )
             if coverage_mode == "Genome-wide" and depth < 20:
                 st.info("Whole genome sequencing usually aims for at least 20X.")
@@ -146,33 +149,26 @@ def run():
         read_filter_loss,
     ) = advanced_options_ui(coverage_mode, params)
 
-    # --- Calculations (build effective output) ---
-    # Start from the platform output (may be runtime-adjusted for MinION).
-    total_bp = output_bp
-
-    # Instrument read filtering (Q-score loss)
-    if read_filter_loss > 0:
-        total_bp *= 1 - read_filter_loss / 100.0
-
-    # Fragment overlap
-    if apply_fragment_model:
-        fsafe = fragment_size if fragment_size is not None else 0
-        rsafe = read_length if read_length is not None else 0
-        total_bp = adjust_for_fragment_overlap(total_bp, rsafe, fsafe)
-
-    # Library complexity (Lander–Waterman)
-    # Avoid zero-sized region feeding the model; use a minimal positive region.
+    # --- Effective output stages (single source of truth) ---
     safe_region_for_model = max(1, int(region_size))
-    if apply_complexity:
-        total_bp = lander_waterman_effective_coverage(safe_region_for_model, total_bp)
+    stages: EffectiveOutputStages = compute_effective_output(
+        base_output_bp=float(output_bp),
+        read_filter_loss_pct=float(read_filter_loss),
+        apply_fragment_model=apply_fragment_model,
+        fragment_size=fragment_size,
+        read_length=read_length,
+        apply_complexity=apply_complexity,
+        apply_gc_bias=apply_gc_bias,
+        gc_bias_pct=float(gc_bias_percent),
+        region_size_bp=safe_region_for_model,
+        duplication_pct=float(duplication),
+        on_target_pct=float(on_target),
+    )
+    total_bp = stages.o4  # Effective output after all stages
 
-    # GC / sequence bias
-    if apply_gc_bias:
-        total_bp = adjust_for_gc_bias(total_bp, gc_bias_percent / 100.0)
-
-    # Calculator with effective-yield terms wired in
+    # --- Calculator using the effective output + eff fraction ---
     calc = CoverageCalculator(
-        region_size_bp=safe_region_for_model,  # guard against 0 → avoids ValueError
+        region_size_bp=safe_region_for_model,
         depth=depth,
         samples=samples,
         output_bp=total_bp,
@@ -180,7 +176,7 @@ def run():
         on_target_pct=on_target,
     )
 
-    # Prepare result
+    # --- Prepare result metric ---
     if variable == "Samples per flow cell":
         result = calc.calc_samples_per_flow_cell()
         label = "Samples per Flow Cell"
@@ -266,8 +262,7 @@ def run():
         depth=float(depth),
         samples=int(samples),
         platform_name=platform["name"],
-        base_output_bp=float(output_bp),
-        total_bp_after=float(total_bp),
+        stages=stages,
         duplication_pct=float(duplication),
         on_target_pct=float(on_target),
         read_filter_loss=float(read_filter_loss),

@@ -1,46 +1,39 @@
 # coverage_calculator/utils/query_state.py
 
-import base64
-import json
+from __future__ import annotations
+
+from typing import Any, Dict
 
 import streamlit as st
 
+from coverage_calculator.utils.config_codec import (
+    decode_config,
+    encode_config,
+)
 
-def safe_cast(val, to_type, default):
+
+def safe_cast(val: Any, to_type, default: Any) -> Any:
     try:
         return to_type(val)
     except (ValueError, TypeError):
         return default
 
 
-def encode_config(params: dict) -> str:
-    json_str = json.dumps(params)
-    return base64.urlsafe_b64encode(json_str.encode()).decode()
-
-
-def decode_config(encoded: str) -> dict:
-    try:
-        if not encoded or encoded in ["null", "None"]:
-            return {}
-        missing_padding = len(encoded) % 4
-        if missing_padding:
-            encoded += "=" * (4 - missing_padding)
-        decoded = base64.urlsafe_b64decode(encoded.encode()).decode()
-        return json.loads(decoded)
-    except Exception as e:
-        st.warning("⚠️ Could not parse the configuration string.")
-        print(f"[decode_config error] {e}")
-        return {}
-
-
-def load_query_params():
+def load_query_params() -> Dict[str, Any]:
+    """
+    Read the app's query params, decode the 'config' blob if present,
+    and return a normalized params dict with safe types & defaults.
+    """
     q = st.query_params
     encoded_config = q.get("config")
+    params: Dict[str, Any] = {}
 
     if encoded_config:
-        params = decode_config(encoded_config)
-    else:
-        params = {}
+        try:
+            params = decode_config(encoded_config)
+        except ValueError:
+            st.warning("⚠️ Could not parse the configuration string.")
+            params = {}
 
     return {
         "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
@@ -68,6 +61,9 @@ def load_query_params():
     }
 
 
-def update_query_params(params: dict):
+def update_query_params(params: Dict[str, Any]) -> None:
+    """
+    Persist the provided params dict into the URL as a compact 'config' blob.
+    """
     encoded = encode_config(params)
     st.query_params["config"] = encoded

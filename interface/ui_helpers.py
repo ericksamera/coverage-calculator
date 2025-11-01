@@ -1,6 +1,7 @@
 # interface/ui_helpers.py
 
-import math
+from __future__ import annotations
+
 from typing import Optional, Tuple
 
 import streamlit as st
@@ -11,6 +12,9 @@ from coverage_calculator.utils.unit_parser import (
 )
 
 
+# ----------------------------
+# Results metric + warnings
+# ----------------------------
 def show_results_ui(
     result_placeholder,
     warning_placeholder,
@@ -23,12 +27,17 @@ def show_results_ui(
     num_amplicons: Optional[int] = None,
 ) -> None:
     """
-    Shows the results metric and any relevant warnings.
+    Shows the result metric and any relevant warnings, with a border around the metric.
     """
     with result_placeholder:
-        st.metric(label=label, value=value, delta=delta, delta_color="off", border=True)
+        with st.container(border=True):
+            st.metric(label=label, value=value, delta=delta, delta_color="off")
 
-    if variable == "Samples per flow cell" and result < 1:
+    if (
+        variable == "Samples per flow cell"
+        and isinstance(result, (int, float))
+        and result < 1
+    ):
         warning_placeholder.warning("Sequencing output is too low for even one sample.")
     if total_bp < 1_000_000:
         warning_placeholder.error("Effective sequencing output is extremely low.")
@@ -42,6 +51,9 @@ def show_results_ui(
         )
 
 
+# ----------------------------
+# Core UI helpers
+# ----------------------------
 def dedup_on_target_ui(preset_values, params) -> Tuple[float, float]:
     """
     Shows duplication and on-target number inputs if Custom, else fills from preset.
@@ -65,13 +77,17 @@ def dedup_on_target_ui(preset_values, params) -> Tuple[float, float]:
                 ),
             )
         with col_target:
+            # Calculator requires (0, 100]; clamp UI to 1–100 to avoid runtime errors.
             on_target = st.number_input(
                 "On-target (%)",
-                min_value=0,
+                min_value=1,
                 max_value=100,
-                value=params["on_target"],
+                value=max(1, int(params["on_target"])),
                 step=1,
-                help="Fraction of sequenced reads mapping to the intended region/target.",
+                help=(
+                    "Fraction of sequenced reads mapping to the intended region/target. "
+                    "Must be ≥ 1%."
+                ),
             )
     return duplication, on_target
 
@@ -228,7 +244,7 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
     base_output_bp = platform["output_bp"]
     output_bp = base_output_bp
 
-    # MinION: runtime-dependent yield
+    # MinION runtime scaling (simple rate × time).
     if "MINION" in platform_id:
         runtime_hr = st.slider(
             "MinION Runtime (hrs)",
@@ -237,7 +253,7 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
             params.get("runtime_hr", 48),
             help="For ONT MinION: expected run duration in hours.",
         )
-        # 3,472,222 bp per minute * 60 minutes/hour
+        # 3,472,222 bp per minute × 60 minutes/hour
         output_bp = 3_472_222 * runtime_hr * 60
         st.caption(
             f"Estimated Output: {format_region_size(int(output_bp))} based on runtime"
@@ -388,216 +404,5 @@ def ddrad_config_ui(
 
 
 # -------------------
-# Math explainer
+# Math explainer (2-column view with LaTeX on both sides)
 # -------------------
-def render_math_explainer(
-    *,
-    variable: str,
-    region_size_bp: int,
-    depth: float,
-    samples: int,
-    platform_name: str,
-    base_output_bp: float,
-    total_bp_after: float,
-    duplication_pct: float,
-    on_target_pct: float,
-    read_filter_loss: float,
-    apply_fragment_model: bool,
-    fragment_size: Optional[int],
-    read_length: Optional[int],
-    applied_complexity: bool,
-    applied_gc_bias: bool,
-    gc_bias_percent: float,
-    result_value: float,
-    # ddRAD context
-    ddrad_enabled: bool = False,
-    ddrad_mode: str = "fraction_to_genome",
-    target_fraction_pct: float = 2.0,
-    known_genome_bp: Optional[int] = None,
-) -> None:
-    """Show a step-by-step explanation of how the result was computed."""
-
-    def fmt_bp(x: float) -> str:
-        return f"{x:,.0f} bp"
-
-    def fmt_pct(x: float) -> str:
-        return f"{x:.2f}"
-
-    # Recompute the intermediate steps purely for display (to show each stage).
-    O0 = float(base_output_bp)  # platform/base output
-    O1 = O0 * (1 - read_filter_loss / 100.0)  # quality filtering
-
-    # Fragment overlap stage
-    redundancy = 0.0
-    overlap_applies = False
-    O2 = O1
-    if (
-        apply_fragment_model
-        and fragment_size
-        and read_length
-        and fragment_size > 0
-        and read_length > 0
-    ):
-        if 2 * read_length > fragment_size:
-            redundancy = (2 * read_length - fragment_size) / (2 * read_length)
-            overlap_applies = True
-            O2 = O1 * (1 - redundancy)
-
-    # Complexity stage (Lander–Waterman: unique bases)
-    O3 = O2
-    if applied_complexity and region_size_bp > 0:
-        O3 = region_size_bp * (1 - math.exp(-O2 / region_size_bp))
-
-    # GC bias
-    O4 = O3
-    if applied_gc_bias:
-        O4 = O3 * (1 - gc_bias_percent / 100.0)
-
-    # Effective-yield fraction from duplicates + on-target
-    eff = (1 - duplication_pct / 100.0) * (on_target_pct / 100.0)
-
-    st.divider()
-    with st.expander("How the math works", expanded=False):
-        st.markdown("### Effective output (bp)")
-        st.markdown(
-            f"""
-1. **Platform output** *(O₀)*: {fmt_bp(O0)} — **{platform_name}**  
-2. **Instrument filtering** *(O₁)*: O₀ × (1 − *q*/100)  
-   • q = {fmt_pct(read_filter_loss)} → **{fmt_bp(O1)}**
-"""
-        )
-        if apply_fragment_model:
-            if overlap_applies:
-                st.markdown(
-                    f"""
-3. **Fragment/read overlap** *(O₂)*: O₁ × (1 − *r*)  
-   • With PE reads longer than fragments:  
-     *r* = (2L − F) / (2L) = (2×{read_length} − {fragment_size}) / (2×{read_length}) = {redundancy:.4f}  
-   → **{fmt_bp(O2)}**
-"""
-                )
-            else:
-                st.markdown(
-                    f"3. **Fragment/read overlap**: Not triggered (2L ≤ F) → **{fmt_bp(O2)}**"
-                )
-        else:
-            st.markdown(f"3. **Fragment/read overlap**: Not applied → **{fmt_bp(O2)}**")
-
-        if applied_complexity:
-            st.markdown(
-                r"""
-4. **Library complexity (Lander–Waterman)** *(O₃)*:
-   \( O_3 = G \cdot \left(1 - e^{-\frac{O_2}{G}}\right) \)
-"""
-            )
-            st.markdown(
-                f"   • G = {fmt_bp(region_size_bp)}; O₂ = {fmt_bp(O2)} → **{fmt_bp(O3)}**"
-            )
-        else:
-            st.markdown(f"4. **Library complexity**: Not applied → **{fmt_bp(O3)}**")
-
-        if applied_gc_bias:
-            st.markdown(
-                f"5. **GC/sequence bias** *(O₄)*: O₃ × (1 − *b*/100);  b = {fmt_pct(gc_bias_percent)} → **{fmt_bp(O4)}**"
-            )
-        else:
-            st.markdown(f"5. **GC/sequence bias**: Not applied → **{fmt_bp(O4)}**")
-
-        st.markdown(
-            f"**Effective output used in final math:**  **Oₑₓₜ = {fmt_bp(total_bp_after)}**"
-        )
-        st.caption(
-            "Values shown above are computed exactly as in the calculator and rounded "
-            "for readability."
-        )
-
-        # Compact symbol legend in LaTeX
-        st.markdown("### Symbols")
-        st.latex(
-            r"""
-\begin{aligned}
-G &:= \text{region size (bp)} &
-D &:= \text{depth (X)} \\
-S &:= \text{number of samples} &
-O_{\text{ext}} &:= \text{effective output after filters (bp)} \\
-\text{eff} &:= \left(1 - \frac{\text{dup}}{100}\right)\!\times\!\frac{\text{on\_target}}{100} &
-q &:= \text{instrument filtering loss (\%)} \\
-L &:= \text{read length (bp)} &
-F &:= \text{fragment size (bp)} \\
-r &:= \frac{2L - F}{2L}\ (\text{if }2L>F) &
-b &:= \text{bias loss (\%)} \\
-G_{\text{target}} &:= \text{coverage-sustained target size (bp)} &
-f &:= \text{target fraction of genome (\%)}
-\end{aligned}
-"""
-        )
-
-        st.markdown("### Effective yield from duplicates & on‑target")
-        st.latex(
-            r"\text{eff} = \left(1 - \frac{\text{dup}}{100}\right) \times \frac{\text{on\_target}}{100}"
-        )
-        st.latex(
-            rf"\text{{eff}} = \left(1 - \frac{{{duplication_pct:.2f}}}{{100}}\right) "
-            rf"\times \frac{{{on_target_pct:.2f}}}{{100}} = {eff:.4f}"
-        )
-
-        st.markdown("### Final formula and result")
-        if variable == "Samples per flow cell":
-            # S = O_ext / (G * D / eff)
-            required_per_sample = (region_size_bp * depth) / eff if eff > 0 else 0.0
-            st.latex(r"S = \dfrac{O_{\text{ext}}}{\frac{G \cdot D}{\text{eff}}}")
-            st.markdown(
-                f"Per‑sample requirement = {fmt_bp(region_size_bp)} × {depth:.1f} / "
-                f"{eff:.4f} = **{fmt_bp(required_per_sample)}**"
-            )
-            st.markdown(
-                f"S = {fmt_bp(total_bp_after)} / "
-                f"({fmt_bp(region_size_bp)} × {depth:.1f} / {eff:.4f}) "
-                f"= **{result_value:.1f}** samples"
-            )
-            st.caption(
-                "Intuition: at depth D over region size G, each sample consumes "
-                "G·D / eff bases; divide the effective output by that requirement."
-            )
-
-        elif variable == "Depth":
-            # D = (O_ext / S) * eff / G
-            per_sample_out = total_bp_after / samples if samples > 0 else 0.0
-            st.latex(
-                r"D = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{G}"
-            )
-            st.markdown(
-                f"Per‑sample output = {fmt_bp(total_bp_after)} / {samples} = "
-                f"**{fmt_bp(per_sample_out)}**"
-            )
-            st.markdown(
-                f"D = (({fmt_bp(total_bp_after)} / {samples}) × {eff:.4f}) / "
-                f"{fmt_bp(region_size_bp)} = **{result_value:.1f}X**"
-            )
-
-        else:  # "Genome size" mode
-            # First: target region that can be covered at depth D across S samples
-            st.latex(
-                r"G_{\text{target}} = \dfrac{\left(\frac{O_{\text{ext}}}{S}\right)\cdot \text{eff}}{D}"
-            )
-            if ddrad_enabled:
-                if ddrad_mode == "fraction_to_genome":
-                    # G_total = G_target / (f/100)
-                    st.latex(r"G = \dfrac{G_{\text{target}}}{(f/100)}")
-                else:
-                    # f = (G_target / G_total) × 100
-                    st.latex(r"f = \left(\dfrac{G_{\text{target}}}{G}\right)\times 100")
-                    if known_genome_bp and known_genome_bp > 0:
-                        st.markdown(
-                            f"With G = {format_region_size(known_genome_bp)}, "
-                            f"f = (G_target / G) × 100."
-                        )
-            # (If not ddRAD, the main metric above already shows the supported region.)
-
-        st.markdown("### Notes")
-        st.markdown(
-            "- All sizes are in decimal units (Kb = 1,000; Mb = 1,000,000; Gb = 1,000,000,000).\n"
-            "- Duplication and on‑target are applied once as an **effective-yield fraction**.\n"
-            "- The Lander–Waterman step converts total bases into **unique covered bases**.\n"
-            "- Overlap reduction only applies when **2×read_length > fragment_size**."
-        )
