@@ -189,10 +189,16 @@ def preset_select_ui(coverage_mode: str, params, GENOME_WIDE_PRESETS, TARGETED_P
     preset_label_list = ["Custom"] + [
         preset.label for preset in active_presets.values()
     ]
+    desired_label = params.get("preset", "Custom")
+    try:
+        default_index = preset_label_list.index(desired_label)
+    except ValueError:
+        default_index = 0
+
     preset_label = st.selectbox(
         "Protocol Preset",
         preset_label_list,
-        index=0,
+        index=default_index,
         help=(
             "Select a common protocol to auto-fill recommended parameters like region "
             "size, duplication, and on-target rate."
@@ -243,23 +249,23 @@ def platform_selector_ui(params, PLATFORM_CONFIG):
 
     base_output_bp = platform["output_bp"]
     output_bp = base_output_bp
+    runtime_hr = params.get("runtime_hr", 48)
 
-    # MinION runtime scaling (simple rate × time).
-    if "MINION" in platform_id:
+    # Prefer config-driven rate when present; works for MinION and similar platforms.
+    bp_per_min = int(platform.get("bp_per_minute", 0))
+
+    if bp_per_min > 0:
         runtime_hr = st.slider(
-            "MinION Runtime (hrs)",
+            "Runtime (hrs)",
             0,
             72,
-            params.get("runtime_hr", 48),
-            help="For ONT MinION: expected run duration in hours.",
+            runtime_hr,
+            help="For ONT MinION or other runtime-scaled platforms.",
         )
-        # 3,472,222 bp per minute × 60 minutes/hour
-        output_bp = 3_472_222 * runtime_hr * 60
+        output_bp = bp_per_min * runtime_hr * 60
         st.caption(
             f"Estimated Output: {format_region_size(int(output_bp))} based on runtime"
         )
-    else:
-        runtime_hr = params.get("runtime_hr", 48)
 
     return platform_id, platform, output_bp, runtime_hr
 

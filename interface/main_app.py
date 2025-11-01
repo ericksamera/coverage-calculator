@@ -117,6 +117,7 @@ def run() -> None:
                 value=params["depth"],
                 disabled=variable == "Depth",
                 step=5,
+                min_value=1,
             )
             if coverage_mode == "Targeted Panel" and depth < 100:
                 st.info(
@@ -133,6 +134,7 @@ def run() -> None:
                 value=params["samples"],
                 step=1,
                 disabled=variable == "Samples per flow cell",
+                min_value=1,
             )
 
     platform_id, platform, output_bp, runtime_hr = platform_selector_ui(
