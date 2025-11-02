@@ -54,16 +54,14 @@ def render_math_explainer(
         bits = [f"**Platform:** **{platform_name}**"]
 
         if variable != "Genome size":
-            bits.append(f"**Region (G):** {format_region_size(region_size_bp)}")
+            st.latex(rf"G = \text{{{format_region_size(int(region_size_bp))}}}")
 
         if variable != "Depth":
-            bits.append(f"**Depth (D):** {depth:.1f}X")
+            st.latex(rf"D = \text{{{depth:.1f}}}")
 
         if variable != "Samples per flow cell":
-            bits.append(f"**Samples (S):** {samples}")
+            st.latex(rf"S = \text{{{int(samples)} sample(s)}}")
 
-        st.markdown(" &nbsp;|&nbsp; ".join(bits))
-        st.divider()
         st.markdown("#### Effective output (bp)")
         left, right = st.columns(2)
         with left:
@@ -196,9 +194,9 @@ r = \frac{2L - F}{2L}
                 )
                 # Optional intermediate:
                 st.caption(
-                    f"Per‑sample requirement (G·D/eff) = {format_region_size(int(denom))}."
+                    f"Per-sample requirement (G·D/eff) = {format_region_size(int(denom))}."
                     if eff > 0
-                    else "Per‑sample requirement is undefined when eff = 0."
+                    else "Per-sample requirement is undefined when eff = 0."
                 )
 
             elif variable == "Depth":
@@ -206,10 +204,10 @@ r = \frac{2L - F}{2L}
                 st.latex(
                     rf"D = \dfrac{{\left(\dfrac{{O_{{\text{{ext}}}}}}{{S}}\right)\cdot \text{{eff}}}}{{G}}"
                     rf" = \dfrac{{\left(\dfrac{{{_fmt_bp_tex(o4)}}}{{{samples}}}\right)\cdot {eff:.4f}}}{{{_fmt_bp_tex(region_size_bp)}}}"
-                    rf" = \mathbf{{{result_value:.1f}}}X"
+                    rf" = \mathbf{{{result_value:.1f}}} \text{{X}}"
                 )
                 st.caption(
-                    f"Per‑sample output = {format_region_size(int(per_sample))}."
+                    f"Per-sample output = {format_region_size(int(per_sample))}."
                 )
 
             else:  # Genome size mode
