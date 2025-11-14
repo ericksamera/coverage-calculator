@@ -51,7 +51,7 @@ def render_math_explainer(
     with st.expander("How the math works", expanded=False):
 
         st.subheader("Formulas & definitions", anchor=False)
-        bits = [f"**Platform:** **{platform_name}**"]
+        st.markdown(f"**Platform:** {platform_name}")
 
         if variable != "Genome size":
             st.latex(rf"G = \text{{{format_region_size(int(region_size_bp))}}}")

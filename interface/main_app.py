@@ -149,7 +149,7 @@ def run() -> None:
         fragment_size,
         read_length,
         read_filter_loss,
-    ) = advanced_options_ui(coverage_mode, params)
+    ) = advanced_options_ui(coverage_mode, params, platform_id, platform)
 
     # --- Effective output stages (single source of truth) ---
     safe_region_for_model = max(1, int(region_size))

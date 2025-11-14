@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional, Tuple
+import re
 
 import streamlit as st
 
@@ -92,11 +93,18 @@ def dedup_on_target_ui(preset_values, params) -> Tuple[float, float]:
     return duplication, on_target
 
 
-def advanced_options_ui(coverage_mode: str, params):
+def advanced_options_ui(
+    coverage_mode: str,
+    params,
+    platform_id=None,
+    platform=None,
+):
     """
     Advanced modeling options expander.
-    Returns: apply_complexity, apply_gc_bias, gc_bias_percent,
-             apply_fragment_model, fragment_size, read_length, read_filter_loss
+
+    Returns:
+      apply_complexity, apply_gc_bias, gc_bias_percent,
+      apply_fragment_model, fragment_size, read_length, read_filter_loss
     """
     with st.expander("Advanced Modeling Options", expanded=False):
         if coverage_mode == "Genome-wide":
@@ -125,6 +133,25 @@ def advanced_options_ui(coverage_mode: str, params):
             ),
         )
 
+        # --- Infer defaults from platform run (e.g. 'MiSeq i100 5M (2x300)') ---
+        default_fragment_size = params.get("fragment_size", 300)
+        default_read_length = params.get("read_length", 150)
+
+        if platform is not None:
+            name = str(platform.get("name", ""))
+            # Grab patterns like "2x300", "2x150", "1x100"
+            m = re.search(r"(\d+)x(\d+)", name)
+            if m:
+                _n_reads, rl = m.groups()
+                try:
+                    rl_int = int(rl)
+                    default_read_length = rl_int
+                    # Simple neutral default: fragment ≈ 2 × read length
+                    default_fragment_size = rl_int * 2
+                except ValueError:
+                    # Fall back to params / hard-coded defaults
+                    pass
+
         read_filter_loss = st.slider(
             "Instrument Q-score/quality filtering loss (%)",
             min_value=0.0,
@@ -141,13 +168,13 @@ def advanced_options_ui(coverage_mode: str, params):
             fragment_size = st.number_input(
                 "Fragment size (bp)",
                 min_value=50,
-                value=params["fragment_size"],
+                value=int(default_fragment_size),
                 help="Average size of sequencing fragments after library prep.",
             )
             read_length = st.number_input(
                 "Read length (bp)",
                 min_value=50,
-                value=params["read_length"],
+                value=int(default_read_length),
                 help="Length of each sequencing read (e.g. 150 for PE150).",
             )
         else:
@@ -407,8 +434,3 @@ def ddrad_config_ui(
             )
 
     return True, ddrad_mode, float(target_fraction_pct), known_genome_input
-
-
-# -------------------
-# Math explainer (2-column view with LaTeX on both sides)
-# -------------------

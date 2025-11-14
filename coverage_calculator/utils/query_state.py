@@ -135,7 +135,9 @@ def share_and_load_ui(params: Optional[Dict[str, Any]] = None) -> None:
                         )
 
         with right:
-            uploaded = st.file_uploader("…or upload a configuration JSON", type=["json"])
+            uploaded = st.file_uploader(
+                "…or upload a configuration JSON", type=["json"]
+            )
             if uploaded is not None:
                 try:
                     data = json.load(uploaded)
