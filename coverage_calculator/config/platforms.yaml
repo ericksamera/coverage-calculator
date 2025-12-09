@@ -1,4 +1,8 @@
 platforms:
+  - id:     MISEQ_I100_25M_PE500
+    name:   "MiSeq i100 25M (2x500)"
+    output: "25 Gb"
+
   - id:     MISEQ_I100_5M_PE300
     name:   "MiSeq i100 5M (2x300)"
     output: "3 Gb"
