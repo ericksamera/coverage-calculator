@@ -16,7 +16,7 @@ APP_COMMENT = (
 
 st.set_page_config(
     page_title=f"ES | {APP_NAME}",
-    page_icon=":material/calculate:",
+    page_icon="🧮",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -37,3 +37,4 @@ with st.sidebar:
     st.caption(APP_COMMENT)
     st.markdown("---")
     share_and_load_ui()
+
