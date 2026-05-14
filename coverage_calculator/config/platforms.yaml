@@ -1,79 +1,78 @@
 platforms:
-  - id:     MISEQ_I100_25M_PE500
-    name:   "MiSeq i100 25M (2x500)"
+  - id: MISEQ_I100_25M_PE500
+    name: "MiSeq i100 25M (2x500)"
     output: "25 Gb"
 
-  - id:     MISEQ_I100_5M_PE300
-    name:   "MiSeq i100 5M (2x300)"
+  - id: MISEQ_I100_5M_PE300
+    name: "MiSeq i100 5M (2x300)"
     output: "3 Gb"
 
-  - id:     MISEQ_I100_25M_PE300
-    name:   "MiSeq i100 25M (2x300)"
+  - id: MISEQ_I100_25M_PE300
+    name: "MiSeq i100 25M (2x300)"
     output: "15 Gb"
 
-  - id:     MISEQ_I100_50M_PE300
-    name:   "MiSeq i100 50M (2x300)"
+  - id: MISEQ_I100_50M_PE300
+    name: "MiSeq i100 50M (2x300)"
     output: "30 Gb"
 
-  - id:     MISEQ_I100_5M_PE150
-    name:   "MiSeq i100 5M (2x150)"
+  - id: MISEQ_I100_5M_PE150
+    name: "MiSeq i100 5M (2x150)"
     output: "1.5 Gb"
 
-  - id:     MISEQ_I100_25M_PE150
-    name:   "MiSeq i100 25M (2x150)"
+  - id: MISEQ_I100_25M_PE150
+    name: "MiSeq i100 25M (2x150)"
     output: "7.5 Gb"
 
-  - id:     MISEQ_I100_50M_PE150
-    name:   "MiSeq i100 50M (2x150)"
+  - id: MISEQ_I100_50M_PE150
+    name: "MiSeq i100 50M (2x150)"
     output: "15 Gb"
 
-  - id:     MISEQ_I100_100M_PE150
-    name:   "MiSeq i100 100M (2x150)"
+  - id: MISEQ_I100_100M_PE150
+    name: "MiSeq i100 100M (2x150)"
     output: "30 Gb"
 
-  - id:     MISEQ_I100_25M_SE100
-    name:   "MiSeq i100 25M (1x100)"
+  - id: MISEQ_I100_25M_SE100
+    name: "MiSeq i100 25M (1x100)"
     output: "2.5 Gb"
 
-  - id:     MISEQ_I100_50M_SE100
-    name:   "MiSeq i100 50M (1x100)"
+  - id: MISEQ_I100_50M_SE100
+    name: "MiSeq i100 50M (1x100)"
     output: "5 Gb"
 
-  - id:     MISEQ_I100_100M_SE100
-    name:   "MiSeq i100 100M (1x100)"
+  - id: MISEQ_I100_100M_SE100
+    name: "MiSeq i100 100M (1x100)"
     output: "10 Gb"
 
-
-  - id:     MISEQ_V2_NANO_500
-    name:   "MiSeq v2 Nano (2x250)"
+  - id: MISEQ_V2_NANO_500
+    name: "MiSeq v2 Nano (2x250)"
     output: "500 Mb"
 
-  - id:     MISEQ_V2_NANO_300
-    name:   "MiSeq v2 Nano (2x150)"
+  - id: MISEQ_V2_NANO_300
+    name: "MiSeq v2 Nano (2x150)"
     output: "300 Mb"
 
-  - id:     MISEQ_V2_MICRO_300
-    name:   "MiSeq v2 Micro (2x150)"
+  - id: MISEQ_V2_MICRO_300
+    name: "MiSeq v2 Micro (2x150)"
     output: "1.2 Gb"
 
-  - id:     MISEQ_V2_50
-    name:   "MiSeq v2 (2x25)"
+  - id: MISEQ_V2_50
+    name: "MiSeq v2 (2x25)"
     output: "750 Mb"
 
-  - id:     MISEQ_V2_300
-    name:   "MiSeq v2 (2x150)"
+  - id: MISEQ_V2_300
+    name: "MiSeq v2 (2x150)"
     output: "4.5 Gb"
 
-  - id:     MISEQ_V2_500
-    name:   "MiSeq v2 (2x250)"
+  - id: MISEQ_V2_500
+    name: "MiSeq v2 (2x250)"
     output: "7.5 Gb"
 
-  - id:     MISEQ_V3_150
-    name:   "MiSeq v3 (2x75)"
+  - id: MISEQ_V3_150
+    name: "MiSeq v3 (2x75)"
     output: "3.8 Gb"
 
-  - id:     MISEQ_V3_600
-    name:   "MiSeq v3 (2x300)"
+  - id: MISEQ_V3_600
+    name: "MiSeq v3 (2x300)"
     output: "15 Gb"
 
   # MinION yield is time‑dependent, so keep a base line plus the rate
@@ -81,3 +80,20 @@ platforms:
     name: "MinION FLO-MIN114"
     output: "15 Gb"
     bp_per_minute: 3472222
+
+  # PacBio HiFi output is represented per SMRT Cell unless noted otherwise.
+  - id: PACBIO_SEQUEL_II_SMRT_CELL_8M
+    name: "PacBio Sequel II/IIe SMRT Cell 8M"
+    output: "30 Gb"
+
+  - id: PACBIO_VEGA_SMRT_CELL
+    name: "PacBio Vega SMRT Cell"
+    output: "60 Gb"
+
+  - id: PACBIO_REVIO_SMRT_CELL_25M
+    name: "PacBio Revio SMRT Cell 25M"
+    output: "120 Gb"
+
+  - id: PACBIO_REVIO_4_SMRT_CELLS_25M
+    name: "PacBio Revio run (4 x SMRT Cell 25M)"
+    output: "480 Gb"

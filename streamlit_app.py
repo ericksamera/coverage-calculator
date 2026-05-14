@@ -37,4 +37,3 @@ with st.sidebar:
     st.caption(APP_COMMENT)
     st.markdown("---")
     share_and_load_ui()
-

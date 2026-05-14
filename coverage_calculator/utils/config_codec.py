@@ -8,7 +8,6 @@ import json
 import zlib
 from typing import Any, Dict, Tuple
 
-
 # Encoding schemes:
 # - cc1: JSON -> base64url (legacy-compatible)
 # - cc2: JSON -> zlib -> base64url, with CRC32 of JSON for corruption detection

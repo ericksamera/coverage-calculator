@@ -67,8 +67,7 @@ def render_math_explainer(
         with left:
             st.latex(r"O_1 = O_0 \times \left(1 - \frac{q}{100}\right)")
             if apply_fragment_model:
-                st.latex(
-                    r"""
+                st.latex(r"""
 O_2 =
 \begin{cases}
 O_1 \times (1 - r) & \text{if } 2L > F \\
@@ -76,8 +75,7 @@ O_1 & \text{otherwise}
 \end{cases}
 \quad\text{where}\quad
 r = \frac{2L - F}{2L}
-"""
-                )
+""")
             else:
                 st.markdown("- **O₂:** fragment/read overlap — *not applied*")
 
