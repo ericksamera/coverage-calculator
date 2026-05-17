@@ -17,6 +17,15 @@ genome_wide:
     duplication_pct: 2.0
     on_target_pct: 100
 
+  - id: shotgun_metagenomics
+    label: "Shotgun metagenomics"
+    # Shotgun metagenomics is planned by data volume per sample, not
+    # coverage of a single 500 bp marker.
+    region_bp: 1
+    duplication_pct: 1.0
+    on_target_pct: 100
+    gb_per_sample: 5.0
+
   - id: ddrad
     label: "ddRAD (Reduced representation)"
     region_bp: 0
@@ -31,10 +40,14 @@ targeted:
     duplication_pct: 10.0
     on_target_pct: 90
     amplicon_count: 1380
+    min_reads_per_amplicon: 500
+    amplicon_imbalance_factor: 3.0
 
-  - id: metagenomics
-    label: "Metagenomics"
+  - id: marker_amplicon
+    label: "16S / ITS / marker amplicon"
     region_bp: 500
     duplication_pct: 1.0
     on_target_pct: 100
     amplicon_count: 1
+    min_reads_per_amplicon: 10000
+    amplicon_imbalance_factor: 1.5

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -14,7 +13,7 @@ class EffectiveOutputStages:
     o0: float  # base/platform output
     o1: float  # after instrument filtering
     o2: float  # after fragment/read overlap
-    o3: float  # after library complexity (unique bases)
+    o3: float  # carried forward after output-only modifiers
     o4: float  # after GC/sequence bias
     overlap_applies: bool
     redundancy: float  # r in (2L-F)/(2L) when overlap applies
@@ -28,15 +27,13 @@ def compute_effective_output(
     apply_fragment_model: bool,
     fragment_size: Optional[int],
     read_length: Optional[int],
-    apply_complexity: bool,
     apply_gc_bias: bool,
     gc_bias_pct: float,
-    region_size_bp: int,
     duplication_pct: float,
     on_target_pct: float,
 ) -> EffectiveOutputStages:
     """
-    Compute O0..O4 and the effective-yield fraction used by the calculator.
+    Compute output-loss stages and the effective-yield fraction used by the calculator.
 
     Returns an EffectiveOutputStages dataclass for UI + math.
     """
@@ -64,12 +61,9 @@ def compute_effective_output(
             redundancy = (2 * read_length - fragment_size) / (2 * read_length)
             o2 = o1 * (1.0 - redundancy)
 
-    # O3: library complexity (unique bases via Lander–Waterman)
-    rsize = max(1, int(region_size_bp))
-    if apply_complexity:
-        o3 = rsize * (1.0 - math.exp(-o2 / rsize))
-    else:
-        o3 = o2
+    # O3: carry forward output after read filtering and fragment/read-overlap
+    # adjustments. This stage is retained for downstream UI/math compatibility.
+    o3 = o2
 
     # O4: GC / sequence bias
     if apply_gc_bias:

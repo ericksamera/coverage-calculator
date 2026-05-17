@@ -21,10 +21,9 @@ def load_platforms() -> Dict[str, Dict[str, Any]]:
 
     platforms: Dict[str, Dict[str, Any]] = {}
     for p in config["platforms"]:
-        platforms[p["id"]] = {
-            "name": p["name"],
-            "output_bp": parse_region_size(p["output"]),
-        }
+        entry = dict(p)
+        entry["output_bp"] = parse_region_size(str(p["output"]))
+        platforms[p["id"]] = entry
     return platforms
 
 

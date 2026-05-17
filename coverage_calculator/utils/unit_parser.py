@@ -1,5 +1,34 @@
 # utils/unit_parser.py
 
+import re
+
+_SUFFIX_MAP = {
+    "gbp": 1_000_000_000,
+    "gbase": 1_000_000_000,
+    "gb": 1_000_000_000,
+    "g": 1_000_000_000,
+    "mbp": 1_000_000,
+    "mbase": 1_000_000,
+    "mb": 1_000_000,
+    "m": 1_000_000,
+    "kbp": 1_000,
+    "kbase": 1_000,
+    "kb": 1_000,
+    "k": 1_000,
+    "bp": 1,
+    "b": 1,
+}
+
+# Match longer suffixes first so values like "500 Kbp" are parsed as
+# 500 * 1,000, not as a malformed "500k" + "bp" split.
+_SUFFIX_PATTERN = "|".join(
+    re.escape(suffix) for suffix in sorted(_SUFFIX_MAP, key=len, reverse=True)
+)
+_REGION_SIZE_RE = re.compile(
+    rf"^(?P<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)"
+    rf"(?P<suffix>{_SUFFIX_PATTERN})?$"
+)
+
 
 def parse_region_size(input_str: str) -> int:
     """
@@ -9,32 +38,23 @@ def parse_region_size(input_str: str) -> int:
 
     Examples:
         '3.2Gb'   -> 3200000000
+        '3.2Gbp'  -> 3200000000
         '500kb'   -> 500000
+        '500 Kbp' -> 500000
         '1e6'     -> 1000000
         '1500'    -> 1500
     """
     if not input_str or not isinstance(input_str, str):
         raise ValueError("Input region size must be a non-empty string.")
 
-    input_str = input_str.strip().replace(" ", "").lower()
-    suffix_map = {
-        "gb": 1_000_000_000,
-        "g": 1_000_000_000,
-        "mb": 1_000_000,
-        "m": 1_000_000,
-        "kb": 1_000,
-        "k": 1_000,
-        "bp": 1,
-        "b": 1,
-    }
+    normalized_input = re.sub(r"\s+", "", input_str).lower()
+    match = _REGION_SIZE_RE.fullmatch(normalized_input)
+    if not match:
+        raise ValueError(f"Could not parse region size from input: '{input_str}'")
 
-    for suffix, factor in suffix_map.items():
-        if input_str.endswith(suffix):
-            num_str = input_str[: -len(suffix)]
-            break
-    else:
-        num_str = input_str
-        factor = 1
+    num_str = match.group("value")
+    suffix = match.group("suffix") or ""
+    factor = _SUFFIX_MAP.get(suffix, 1)
 
     try:
         # Accept both floats and scientific notation (e.g., 1e6)

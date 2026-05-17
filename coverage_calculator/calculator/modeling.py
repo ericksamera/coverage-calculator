@@ -1,19 +1,5 @@
 # coverage_calculator/calculator/modeling.py
 
-import math
-
-
-def lander_waterman_effective_coverage(
-    genome_size_bp: int, total_bases: float
-) -> float:
-    """
-    Estimate the effective coverage using the Lander-Waterman model.
-    Returns the number of unique bases expected to be covered.
-    """
-    if genome_size_bp <= 0:
-        return 0
-    return genome_size_bp * (1 - math.exp(-total_bases / genome_size_bp))
-
 
 def adjust_for_gc_bias(effective_bp: float, gc_dropout_factor: float = 0.05) -> float:
     """

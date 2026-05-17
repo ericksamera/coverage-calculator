@@ -17,6 +17,9 @@ class ProtocolPreset:
     on_target_pct: float
     amplicon_count: Optional[int] = None
     target_fraction_pct: Optional[float] = None
+    min_reads_per_amplicon: Optional[int] = None
+    amplicon_imbalance_factor: Optional[float] = None
+    gb_per_sample: Optional[float] = None
 
 
 def load_presets() -> Dict[str, Dict[str, ProtocolPreset]]:
@@ -39,6 +42,19 @@ def load_presets() -> Dict[str, Dict[str, ProtocolPreset]]:
                     float(p["target_fraction_pct"])
                     if "target_fraction_pct" in p
                     else None
+                ),
+                min_reads_per_amplicon=(
+                    int(p["min_reads_per_amplicon"])
+                    if "min_reads_per_amplicon" in p
+                    else None
+                ),
+                amplicon_imbalance_factor=(
+                    float(p["amplicon_imbalance_factor"])
+                    if "amplicon_imbalance_factor" in p
+                    else None
+                ),
+                gb_per_sample=(
+                    float(p["gb_per_sample"]) if "gb_per_sample" in p else None
                 ),
             )
     return presets

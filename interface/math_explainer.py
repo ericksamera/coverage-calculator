@@ -5,9 +5,11 @@ from typing import Optional
 
 import streamlit as st
 
+from coverage_calculator.calculator.amplicon_model import AmpliconPlan
 from coverage_calculator.calculator.effective_output import (
     EffectiveOutputStages,
 )
+from coverage_calculator.calculator.run_planning import RunPlan
 from coverage_calculator.utils.unit_parser import format_region_size
 
 
@@ -25,7 +27,6 @@ def render_math_explainer(
     apply_fragment_model: bool,
     fragment_size: Optional[int],
     read_length: Optional[int],
-    applied_complexity: bool,
     applied_gc_bias: bool,
     gc_bias_percent: float,
     result_value: float,
@@ -79,10 +80,7 @@ r = \frac{2L - F}{2L}
             else:
                 st.markdown("- **O₂:** fragment/read overlap — *not applied*")
 
-            if applied_complexity:
-                st.latex(r"O_3 = G \cdot \left(1 - e^{-O_2/G}\right)")
-            else:
-                st.markdown("- **O₃:** library complexity — *not applied*")
+            st.latex(r"O_3 = O_2")
 
             if applied_gc_bias:
                 st.latex(r"O_4 = O_3 \times \left(1 - \frac{b}{100}\right)")
@@ -120,15 +118,7 @@ r = \frac{2L - F}{2L}
                     rf"O_2 = O_1 \quad (\text{{not applied}}) = \mathbf{{{_fmt_bp_tex(o2)}}}"
                 )
 
-            if applied_complexity:
-                st.latex(
-                    rf"O_3 = G \cdot \left(1 - e^{{-O_2/G}}\right) = {_fmt_bp_tex(region_size_bp)} \cdot "
-                    rf"\left(1 - e^{{-{o2:.0f}/{region_size_bp:.0f}}}\right) = \mathbf{{{_fmt_bp_tex(o3)}}}"
-                )
-            else:
-                st.latex(
-                    rf"O_3 = O_2 \quad (\text{{not applied}}) = \mathbf{{{_fmt_bp_tex(o3)}}}"
-                )
+            st.latex(rf"O_3 = O_2 = \mathbf{{{_fmt_bp_tex(o3)}}}")
 
             if applied_gc_bias:
                 st.latex(
@@ -238,3 +228,156 @@ r = \frac{2L - F}{2L}
             "Values above reuse the same math as the calculator; numbers are rounded "
             "for readability."
         )
+
+
+def render_amplicon_math_explainer(
+    *,
+    variable: str,
+    plan: AmpliconPlan,
+    num_amplicons: int,
+    amplicon_size_bp: int,
+    min_reads_per_amplicon: int,
+    amplicon_imbalance_factor: float,
+    samples: int,
+    output_bp: float,
+    eff_fraction: float,
+    result_value: float,
+) -> None:
+    """Math explainer for amplicon read-count planning."""
+
+    st.divider()
+    with st.expander("How the amplicon math works", expanded=False):
+        unit = plan.read_unit_label
+        st.markdown("#### Amplicon read-count model")
+        st.latex(r"A = \text{number of amplicons}")
+        st.latex(r"R_{min} = \text{minimum usable read units per amplicon}")
+        st.latex(r"I = \text{amplicon imbalance factor}")
+        st.latex(r"B = \text{bases per read unit}")
+        st.latex(r"\text{eff} = (1 - \text{dup}/100)\times(\text{on-target}/100)")
+
+        st.markdown("#### Values")
+        st.markdown(
+            f"A = **{num_amplicons:,}**, average amplicon size = "
+            f"**{amplicon_size_bp:,} bp**, B = **{plan.bases_per_unit:,} bp per {unit[:-1] if unit.endswith('s') else unit}**, "
+            f"R_min = **{min_reads_per_amplicon:,}**, I = **{amplicon_imbalance_factor:.2f}**, "
+            f"eff = **{eff_fraction:.4f}**."
+        )
+
+        if variable == "Samples per flow cell":
+            st.latex(
+                r"S = \dfrac{O}{\left(A\times R_{min}\times I\times B\right) / \text{eff}}"
+            )
+            st.latex(
+                rf"S = \dfrac{{{format_region_size(int(output_bp))}}}{{"
+                rf"({num_amplicons}\times {min_reads_per_amplicon}\times {amplicon_imbalance_factor:.2f}\times {plan.bases_per_unit})/{eff_fraction:.4f}}}"
+                rf" = \mathbf{{{result_value:.1f}}}\ \text{{samples}}"
+            )
+        elif variable == "Depth":
+            st.latex(r"R_{amp} = \dfrac{(O/S)/B\times \text{eff}}{A\times I}")
+            st.latex(
+                rf"R_{{amp}} = \dfrac{{({format_region_size(int(output_bp))}/{samples})/{plan.bases_per_unit}\times {eff_fraction:.4f}}}{{{num_amplicons}\times {amplicon_imbalance_factor:.2f}}}"
+                rf" = \mathbf{{{result_value:.0f}}}\ \text{{{unit}/amplicon}}"
+            )
+        else:
+            st.latex(
+                r"A_{supported} = \dfrac{(O/S)/B\times \text{eff}}{R_{min}\times I}"
+            )
+            supported_amplicons = result_value / max(1, amplicon_size_bp)
+            st.latex(
+                rf"A_{{supported}} = \dfrac{{({format_region_size(int(output_bp))}/{samples})/{plan.bases_per_unit}\times {eff_fraction:.4f}}}{{{min_reads_per_amplicon}\times {amplicon_imbalance_factor:.2f}}}"
+                rf" = \mathbf{{{supported_amplicons:.0f}}}\ \text{{amplicons}}"
+            )
+            st.caption(
+                f"Supported panel size = {supported_amplicons:.0f} amplicons × "
+                f"{amplicon_size_bp:,} bp ≈ {format_region_size(int(result_value))}."
+            )
+
+
+def render_shotgun_math_explainer(
+    *,
+    variable: str,
+    target_gb_per_sample: float,
+    usable_gb_per_sample: float,
+    samples: int,
+    output_bp: float,
+    eff_fraction: float,
+    result_value: float,
+) -> None:
+    """Math explainer for shotgun metagenomics data-volume planning."""
+
+    st.divider()
+    with st.expander("How the shotgun metagenomics math works", expanded=False):
+        st.markdown("#### Data-volume model")
+        st.latex(r"O_{usable} = O \times \text{eff}")
+        st.latex(r"T = \text{target usable data per sample in Gb}")
+        st.latex(
+            rf"O_{{usable}} = {format_region_size(int(output_bp))}\times {eff_fraction:.4f} = "
+            rf"\mathbf{{{format_region_size(int(output_bp * eff_fraction))}}}"
+        )
+
+        if variable == "Samples per flow cell":
+            st.latex(r"S = \dfrac{O_{usable}}{T\times 10^9}")
+            st.latex(
+                rf"S = \dfrac{{{format_region_size(int(output_bp * eff_fraction))}}}{{{target_gb_per_sample:.2f}\times 10^9}}"
+                rf" = \mathbf{{{result_value:.1f}}}\ \text{{samples}}"
+            )
+        else:
+            st.latex(r"\text{Gb/sample} = \dfrac{O_{usable}/S}{10^9}")
+            st.latex(
+                rf"\text{{Gb/sample}} = \dfrac{{{format_region_size(int(output_bp * eff_fraction))}/{samples}}}{{10^9}}"
+                rf" = \mathbf{{{usable_gb_per_sample:.2f}}}\ \text{{Gb}}"
+            )
+            if variable == "Genome size":
+                st.caption(
+                    "Genome-size solving is not meaningful for shotgun metagenomics; "
+                    "the calculator reports usable data volume per sample instead."
+                )
+
+
+def render_run_planning_math_explainer(
+    *,
+    plan: RunPlan,
+    singular_unit: str,
+    plural_unit: str,
+) -> None:
+    """Math explainer for converting theoretical capacity into integer units."""
+
+    st.divider()
+    with st.expander("How run planning is calculated", expanded=False):
+        st.markdown("#### Operational loading model")
+        st.latex(r"C = \text{theoretical samples per sequencing unit}")
+        st.latex(r"M = \text{reserve margin (\%)}")
+        st.latex(r"N = \text{samples to plan}")
+        st.latex(r"C_{adj} = C \times \left(1 - \frac{M}{100}\right)")
+        st.latex(r"C_{rec} = \left\lfloor C_{adj}\right\rfloor")
+        st.latex(r"U = \left\lceil \frac{N}{C_{rec}}\right\rceil")
+
+        st.markdown("#### Values")
+        st.latex(
+            rf"C_{{adj}} = {plan.theoretical_samples_per_unit:.2f}"
+            rf"\times \left(1 - \frac{{{plan.reserve_margin_pct:.1f}}}{{100}}\right)"
+            rf" = \mathbf{{{plan.adjusted_samples_per_unit:.2f}}}"
+        )
+
+        if plan.recommended_samples_per_unit > 0:
+            st.latex(
+                rf"C_{{rec}} = \left\lfloor {plan.adjusted_samples_per_unit:.2f} \right\rfloor"
+                rf" = \mathbf{{{plan.recommended_samples_per_unit}}}"
+            )
+            st.latex(
+                rf"U = \left\lceil \frac{{{plan.planning_samples}}}{{{plan.recommended_samples_per_unit}}} \right\rceil"
+                rf" = \mathbf{{{plan.units_required}}}\ \text{{{plural_unit}}}"
+            )
+            st.latex(
+                rf"\text{{unused capacity}} = ({plan.units_required}\times {plan.recommended_samples_per_unit})"
+                rf" - {plan.planning_samples} = \mathbf{{{plan.unused_capacity_samples:.1f}}}\ \text{{samples}}"
+            )
+        else:
+            st.latex(
+                rf"U = \left\lceil \frac{{{plan.planning_samples}}}{{{plan.adjusted_samples_per_unit:.2f}}} \right\rceil"
+                rf" = \mathbf{{{plan.units_required}}}\ \text{{{plural_unit}}}"
+            )
+            st.caption(
+                f"Less than one whole sample fits per {singular_unit} after the reserve "
+                "margin, so required units are calculated from fractional adjusted capacity."
+            )

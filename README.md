@@ -8,7 +8,7 @@ Easily estimate samples per flowcell, coverage depth, or region size for any pla
 - Genome-wide or targeted panel calculations
 - Preset protocols (WGS, exome, panels) and sequencing platforms (MiSeq, MinION, etc.)
 - Handles sample number, depth, genome/target size, duplication, and more
-- Advanced options for bias, fragment overlap, library complexity, and read filtering
+- Advanced options for bias, fragment overlap, and read filtering
 - No spreadsheet needed—results and warnings update instantly
 
 ## Customizing

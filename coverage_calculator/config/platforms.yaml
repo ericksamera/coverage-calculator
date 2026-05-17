@@ -1,99 +1,257 @@
 platforms:
   - id: MISEQ_I100_25M_PE500
     name: "MiSeq i100 25M (2x500)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "25M"
+    read_length: "2×500"
+    read_structure: "2x500"
+    read_count: 2
+    read_length_bp: 500
     output: "25 Gb"
 
   - id: MISEQ_I100_5M_PE300
     name: "MiSeq i100 5M (2x300)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "5M"
+    read_length: "2×300"
+    read_structure: "2x300"
+    read_count: 2
+    read_length_bp: 300
     output: "3 Gb"
 
   - id: MISEQ_I100_25M_PE300
     name: "MiSeq i100 25M (2x300)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "25M"
+    read_length: "2×300"
+    read_structure: "2x300"
+    read_count: 2
+    read_length_bp: 300
     output: "15 Gb"
 
   - id: MISEQ_I100_50M_PE300
     name: "MiSeq i100 50M (2x300)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "50M"
+    read_length: "2×300"
+    read_structure: "2x300"
+    read_count: 2
+    read_length_bp: 300
     output: "30 Gb"
 
   - id: MISEQ_I100_5M_PE150
     name: "MiSeq i100 5M (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "5M"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "1.5 Gb"
 
   - id: MISEQ_I100_25M_PE150
     name: "MiSeq i100 25M (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "25M"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "7.5 Gb"
 
   - id: MISEQ_I100_50M_PE150
     name: "MiSeq i100 50M (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "50M"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "15 Gb"
 
   - id: MISEQ_I100_100M_PE150
     name: "MiSeq i100 100M (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "100M"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "30 Gb"
 
   - id: MISEQ_I100_25M_SE100
     name: "MiSeq i100 25M (1x100)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "25M"
+    read_length: "1×100"
+    read_structure: "1x100"
+    read_count: 1
+    read_length_bp: 100
     output: "2.5 Gb"
 
   - id: MISEQ_I100_50M_SE100
     name: "MiSeq i100 50M (1x100)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "50M"
+    read_length: "1×100"
+    read_structure: "1x100"
+    read_count: 1
+    read_length_bp: 100
     output: "5 Gb"
 
   - id: MISEQ_I100_100M_SE100
     name: "MiSeq i100 100M (1x100)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq i100"
+    flow_cell: "100M"
+    read_length: "1×100"
+    read_structure: "1x100"
+    read_count: 1
+    read_length_bp: 100
     output: "10 Gb"
 
   - id: MISEQ_V2_NANO_500
     name: "MiSeq v2 Nano (2x250)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2 Nano"
+    read_length: "2×250"
+    read_structure: "2x250"
+    read_count: 2
+    read_length_bp: 250
     output: "500 Mb"
 
   - id: MISEQ_V2_NANO_300
     name: "MiSeq v2 Nano (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2 Nano"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "300 Mb"
 
   - id: MISEQ_V2_MICRO_300
     name: "MiSeq v2 Micro (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2 Micro"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "1.2 Gb"
 
   - id: MISEQ_V2_50
     name: "MiSeq v2 (2x25)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2"
+    read_length: "2×25"
+    read_structure: "2x25"
+    read_count: 2
+    read_length_bp: 25
     output: "750 Mb"
 
   - id: MISEQ_V2_300
     name: "MiSeq v2 (2x150)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2"
+    read_length: "2×150"
+    read_structure: "2x150"
+    read_count: 2
+    read_length_bp: 150
     output: "4.5 Gb"
 
   - id: MISEQ_V2_500
     name: "MiSeq v2 (2x250)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v2"
+    read_length: "2×250"
+    read_structure: "2x250"
+    read_count: 2
+    read_length_bp: 250
     output: "7.5 Gb"
 
   - id: MISEQ_V3_150
     name: "MiSeq v3 (2x75)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v3"
+    read_length: "2×75"
+    read_structure: "2x75"
+    read_count: 2
+    read_length_bp: 75
     output: "3.8 Gb"
 
   - id: MISEQ_V3_600
     name: "MiSeq v3 (2x300)"
+    technology: "Illumina short-read"
+    instrument: "MiSeq"
+    flow_cell: "v3"
+    read_length: "2×300"
+    read_structure: "2x300"
+    read_count: 2
+    read_length_bp: 300
     output: "15 Gb"
 
-  # MinION yield is time‑dependent, so keep a base line plus the rate
+  # MinION yield is time-dependent, so keep a baseline plus the rate.
   - id: MINION
     name: "MinION FLO-MIN114"
+    technology: "ONT nanopore"
+    instrument: "MinION"
+    flow_cell: "FLO-MIN114"
+    read_length: "Variable"
+    read_structure: "variable"
     output: "15 Gb"
     bp_per_minute: 3472222
 
   # PacBio HiFi output is represented per SMRT Cell unless noted otherwise.
   - id: PACBIO_SEQUEL_II_SMRT_CELL_8M
     name: "PacBio Sequel II/IIe SMRT Cell 8M"
+    technology: "PacBio HiFi"
+    instrument: "Sequel II/IIe"
+    flow_cell: "SMRT Cell 8M"
+    read_length: "HiFi reads"
+    read_structure: "hifi"
     output: "30 Gb"
 
   - id: PACBIO_VEGA_SMRT_CELL
     name: "PacBio Vega SMRT Cell"
+    technology: "PacBio HiFi"
+    instrument: "Vega"
+    flow_cell: "SMRT Cell"
+    read_length: "HiFi reads"
+    read_structure: "hifi"
     output: "60 Gb"
 
   - id: PACBIO_REVIO_SMRT_CELL_25M
     name: "PacBio Revio SMRT Cell 25M"
+    technology: "PacBio HiFi"
+    instrument: "Revio"
+    flow_cell: "SMRT Cell 25M"
+    read_length: "HiFi reads"
+    read_structure: "hifi"
     output: "120 Gb"
 
   - id: PACBIO_REVIO_4_SMRT_CELLS_25M
     name: "PacBio Revio run (4 x SMRT Cell 25M)"
+    technology: "PacBio HiFi"
+    instrument: "Revio"
+    flow_cell: "4 × SMRT Cell 25M"
+    read_length: "HiFi reads"
+    read_structure: "hifi"
     output: "480 Gb"

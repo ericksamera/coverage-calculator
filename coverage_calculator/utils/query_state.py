@@ -41,6 +41,8 @@ def load_query_params() -> Dict[str, Any]:
             )
             params = {}
 
+    default_planning_samples = safe_cast(params.get("samples"), int, 1)
+
     return {
         "coverage_mode": params.get("coverage_mode", "Targeted Panel"),
         "variable": params.get("variable", "Samples per flow cell"),
@@ -50,9 +52,8 @@ def load_query_params() -> Dict[str, Any]:
         "samples": safe_cast(params.get("samples"), int, 1),
         "duplication": safe_cast(params.get("duplication"), float, 2.5),
         "on_target": safe_cast(params.get("on_target"), int, 85),
-        "platform": params.get("platform", "NovaSeq 6000"),
+        "platform": params.get("platform", "MISEQ_I100_25M_PE300"),
         "runtime_hr": safe_cast(params.get("runtime_hr"), int, 48),
-        "apply_complexity": params.get("apply_complexity", False),
         "apply_gc_bias": params.get("apply_gc_bias", False),
         "gc_bias_percent": safe_cast(params.get("gc_bias_percent"), float, 5.0),
         "apply_fragment_model": params.get("apply_fragment_model", False),
@@ -61,6 +62,19 @@ def load_query_params() -> Dict[str, Any]:
         "read_length": safe_cast(params.get("read_length"), int, 150),
         "num_amplicons": safe_cast(params.get("num_amplicons"), int, 1380),
         "amplicon_size": safe_cast(params.get("amplicon_size"), int, 175),
+        "min_reads_per_amplicon": safe_cast(
+            params.get("min_reads_per_amplicon"), int, 500
+        ),
+        "amplicon_imbalance_factor": safe_cast(
+            params.get("amplicon_imbalance_factor"), float, 3.0
+        ),
+        "shotgun_gb_per_sample": safe_cast(
+            params.get("shotgun_gb_per_sample"), float, 5.0
+        ),
+        "planning_samples": safe_cast(
+            params.get("planning_samples"), int, default_planning_samples
+        ),
+        "reserve_margin_pct": safe_cast(params.get("reserve_margin_pct"), float, 15.0),
         # ddRAD
         "target_fraction_pct": safe_cast(params.get("target_fraction_pct"), float, 2.0),
         "ddrad_mode": params.get("ddrad_mode", "fraction_to_genome"),
