@@ -15,3 +15,8 @@ Easily estimate samples per flowcell, coverage depth, or region size for any pla
 
 - Edit protocols/panels: coverage_calculator/config/presets.yaml
 - Edit platforms: coverage_calculator/config/platforms.yaml
+
+## Versioning
+
+Update the repository-root `VERSION` file to change the application version.
+Python modules can read the same value with `from coverage_calculator import __version__`.

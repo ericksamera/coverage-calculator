@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
+from coverage_calculator import __version__ as APP_VERSION
 from interface.main_app import run as run_calculator_ui
 from coverage_calculator.utils.query_state import share_and_load_ui
 
 APP_NAME = "Sequencing Calculator"
-APP_VERSION = "1.1.0"
 APP_AUTHOR = "Erick Samera"
 APP_COMMENT = (
     "For calculating samples per flowcell, necessary depth, or supported genome size"
